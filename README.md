@@ -1,3 +1,6 @@
+<p align="center">
+  <img src=".logos/github-banner-photo-style.svg" alt="SmallWorlds Forever" width="800">
+</p>
 
 # SmallWorlds Recreation Project
 
@@ -100,4 +103,4 @@ Contributions are what make the open-source community such an amazing place to l
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 ## License
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the AGPL-3.0 License. See `LICENSE` for more information.
