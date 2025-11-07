@@ -1,0 +1,35 @@
+body {
+  color: white;
+  font-size: large;
+  
+  font-family: 'Comic Neue', cursive;
+  background-image: url("/imgs/backblur.png");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-position: center;
+}
+
+.footer {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background-color: black;
+  color: white;
+  text-align: center;
+}
+
+.btn {
+  background-color: #8e8c8c4a !important;
+}
+nav {
+  box-shadow: none !important;
+  background-color: transparent !important;
+  -webkit-app-region: drag;
+}
+
+nav li 
+{
+  -webkit-app-region: no-drag;
+}

@@ -1,0 +1,1 @@
+import{_ as r,af as t,s as a,y as s,ar as o}from"./index.be27aa94.js";const n=t({name:"SpaceView",data(){return{url:o.currentRoute.value.path}}}),c=["src"];function p(e,l,u,i,d,_){return a(),s("iframe",{src:"https://smallworlds.app"+e.url,style:{width:"100%",height:"100%",border:"none"}},null,8,c)}const m=r(n,[["render",p]]);export{m as default};

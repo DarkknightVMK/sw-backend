@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="UnattendedHostPersistenceState">
+    <option name="openedFilesInfos">
+      <list>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="132" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Models/catalogSpaceEntry.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="132" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Models/catalogItemEntry.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="157" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Models/catalogCategories.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="157" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Models/avatarSpaces.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="4113" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/database/migrations/2022_02_03_015750_create_mission_chains_table.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="377" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Models/missions.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="19709" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/app/Http/Services/ds.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="500" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/composer.json" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="377" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/database/migrations/2022_04_29_110314_create_pets_table.php" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="729" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/database/migrations/2022_05_18_100252_add_c_i_dtoavatars.php" />
+        </OpenedFileInfo>
+      </list>
+    </option>
+  </component>
+</project>

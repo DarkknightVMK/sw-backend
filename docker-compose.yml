@@ -1,0 +1,63 @@
+version: '3'
+services:
+
+  #PHP Service
+  sw_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sw_app
+    container_name: sw_app
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: false
+    tty: true
+    environment:
+      SERVICE_NAME: app
+      SERVICE_TAGS: dev
+    working_dir: /var/www/api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./php/www.conf:/usr/local/etc/php-fpm.d/www.conf
+    networks:
+      - sw-app-network
+
+  #Nginx Service
+  sw_webserver:
+    image: nginx:latest
+    container_name: sw_webserver
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "900:80"
+      - "901:443"
+    volumes:
+      - ../:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - sw-app-network
+  node:
+    image: node:latest
+    container_name: node
+    working_dir: /var/www/api
+    volumes:
+      - ../:/var/www
+      - ../../../docker/init-scripts/:/init-scripts/
+    entrypoint:
+      - /init-scripts/node_start.sh
+    ports:
+      - 3000:3000
+      - 3001:3001
+      - 5173:5173
+    networks:
+      - sw-app-network
+    depends_on:
+      - 'sw_app'
+
+#Docker Networks
+networks:
+  sw-app-network:
+    driver: bridge

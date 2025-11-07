@@ -1,0 +1,38 @@
+<IfModule mod_rewrite.c>
+AcceptPathInfo On
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^www\.([^\.]*)\.splotus\.com$ [NC]
+RewriteRule (.*) http://%1.splotus.com$1 [R=301,L] 
+<IfModule mod_security.c>
+	SecFilterEngine Off
+	SecFilterScanPOST Off
+</IfModule>
+# Enable rewrite engine and route requests to framework
+  <IfModule mod_headers.c>
+   Header set Access-Control-Allow-Origin "*"
+ </IfModule>
+# Disable ETags
+<IfModule mod_headers.c>
+    Header Unset ETag
+    FileETag none
+</IfModule>
+
+
+
+<IfModule mod_rewrite.c>
+Options -MultiViews
+
+	RewriteEngine On
+	#	If you are having problems with the rewrite rules, remove the "#" from the
+	#	line that begins "RewriteBase" below. You will also have to change the path
+	#	of the rewrite to reflect the path to your XenForo installation.
+	#RewriteBase /
+
+	#	This line may be needed to enable WebDAV editing with PHP as a CGI.
+	#RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+	RewriteCond %{REQUEST_FILENAME} -f [OR]
+	RewriteCond %{REQUEST_FILENAME} -l [OR]
+	RewriteCond %{REQUEST_FILENAME} -d
+	RewriteRule ^.*$ - [NC,L]
+	RewriteRule ^(data/|js/|styles/|install/|favicon\.ico|crossdomain\.xml|robots\.txt) - [NC,L]
+	RewriteRule ^.*$ index.php [NC,L]
