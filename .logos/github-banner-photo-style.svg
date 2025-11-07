@@ -1,0 +1,94 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+	<defs>
+		<!-- Background vignette similar to photo -->
+		<radialGradient id="bg" cx="50%" cy="40%" r="65%">
+			<stop offset="0%" stop-color="#1f2a2e"/>
+			<stop offset="45%" stop-color="#162126"/>
+			<stop offset="100%" stop-color="#0f1a1e"/>
+		</radialGradient>
+
+		<!-- Soft shadow for text -->
+		<filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+			<feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+			<feOffset dx="0" dy="2" result="offset"/>
+			<feMerge>
+				<feMergeNode in="offset"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+
+		<!-- Chrome-like fill for letters -->
+		<linearGradient id="chrome" x1="0%" y1="0%" x2="0%" y2="100%">
+			<stop offset="0%" stop-color="#f7f7f7"/>
+			<stop offset="35%" stop-color="#dcdcdc"/>
+			<stop offset="65%" stop-color="#bdbdbd"/>
+			<stop offset="100%" stop-color="#a3a3a3"/>
+		</linearGradient>
+
+		<!-- Teal glow used for O and infinity -->
+		<radialGradient id="tealGlow" cx="50%" cy="50%" r="50%">
+			<stop offset="0%" stop-color="#66ffff"/>
+			<stop offset="50%" stop-color="#00ffff"/>
+			<stop offset="100%" stop-color="#00c8c8"/>
+		</radialGradient>
+
+		<!-- Extra glow -->
+		<filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+			<feGaussianBlur stdDeviation="8" result="g"/>
+			<feMerge>
+				<feMergeNode in="g"/>
+				<feMergeNode in="SourceGraphic"/>
+			</feMerge>
+		</filter>
+
+		<!-- Subtle halo behind WORLDS -->
+		<radialGradient id="halo" cx="44%" cy="48%" r="40%">
+			<stop offset="0%" stop-color="#00ffff" stop-opacity="0.18"/>
+			<stop offset="60%" stop-color="#00c8c8" stop-opacity="0.08"/>
+			<stop offset="100%" stop-color="#00a0a0" stop-opacity="0"/>
+		</radialGradient>
+	</defs>
+
+	<!-- Background -->
+	<rect width="1280" height="640" fill="url(#bg)"/>
+	<!-- Halo to echo the photo's center glow -->
+	<ellipse cx="640" cy="300" rx="520" ry="260" fill="url(#halo)"/>
+
+	<!-- SMALL (upper line) -->
+	<text x="640" y="190" font-family="Arial, Helvetica, sans-serif" font-weight="700"
+				font-size="80" letter-spacing="16" text-anchor="middle" fill="url(#chrome)"
+				filter="url(#softShadow)">SMALL</text>
+
+	<!-- WORLDS main word, with ring "O" -->
+	<g aria-label="WORLDS" font-family="Arial, Helvetica, sans-serif" font-weight="700"
+		 filter="url(#softShadow)">
+		<!-- W (shifted slightly left to move center left) -->
+		<text x="295" y="320" font-size="160" fill="url(#chrome)">W</text>
+
+		<!-- Glowing O ring (constructed with two circles) -->
+		<!-- Outer glow (raised further) -->
+		<circle cx="515" cy="262" r="56" fill="none" stroke="url(#tealGlow)" stroke-width="18" filter="url(#glow)"/>
+		<!-- Inner dark fill to create the ring look (raised to match) -->
+		<!-- <circle cx="515" cy="262" r="36" fill="#112026"/> -->
+
+		<!-- RLDS (shifted left to move center left) -->
+		<text x="580" y="320" font-size="160" fill="url(#chrome)" letter-spacing="6">RLDS</text>
+	</g>
+
+	<!-- FOREVER (lower line) -->
+	<text x="640" y="420" font-family="Arial, Helvetica, sans-serif" font-weight="700"
+				font-size="72" letter-spacing="18" text-anchor="middle" fill="url(#chrome)"
+				filter="url(#softShadow)">FOREVER</text>
+
+	<!-- Infinity symbol beneath -->
+	<g transform="translate(640,495)" filter="url(#glow)">
+		<path d="M -65,0 C -82,-22 -108,-22 -125,0 C -140,20 -140,44 -125,64 C -108,86 -82,86 -65,64 C -50,44 -25,44 -10,64 C 8,86 34,86 51,64 C 66,44 66,20 51,0 C 34,-22 8,-22 -10,0 C -25,20 -50,20 -65,0 Z"
+					fill="none" stroke="url(#tealGlow)" stroke-width="16" stroke-linecap="round"/>
+	</g>
+
+	<!-- Minimal sparkles (very subtle) -->
+	<circle cx="370" cy="160" r="3" fill="#66ffff" opacity="0.8" filter="url(#glow)"/>
+	<circle cx="920" cy="190" r="2.5" fill="#66ffff" opacity="0.7" filter="url(#glow)"/>
+	<circle cx="250" cy="430" r="2.5" fill="#66ffff" opacity="0.6" filter="url(#glow)"/>
+	<circle cx="1040" cy="440" r="2.5" fill="#66ffff" opacity="0.6" filter="url(#glow)"/>
+</svg>
