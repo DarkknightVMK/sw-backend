@@ -7,8 +7,11 @@ use Illuminate\Http\Request;
 use App\Models\items;
 use App\Models\avatarItems;
 use App\Models\Avatars;
+use App\Models\avatarFriends;
+use App\Models\Gift;
 use App\Models\avatarWearing;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 use function App\Http\Controllers\create_guid as ControllersCreate_guid;
 
@@ -278,9 +281,262 @@ class ItemsController extends Controller
 
 
 
-        
-        
+
+
         return response($response, 200);
+    }
+
+    /**
+     * Gift one or more owned items to a friend's avatar.
+     *
+     * Body: {
+     *   recipientAvatarId: string,           // friend's avatar_id (friend.friend_id)
+     *   items: [{ modelId: int, count: int }],
+     *   message?: string                     // optional note (<= 200 chars)
+     * }
+     *
+     * Deducts the items from the sender's inventory and creates fresh, gift-tagged
+     * rows in the recipient's inventory inside a single transaction, so a partial
+     * transfer can never happen. `item_gifted_by_avatar` + `giftMessage` carry the
+     * gift metadata the client's transaction log reads back.
+     */
+    public function gift(Request $request)
+    {
+        $validated = $request->validate([
+            'recipientAvatarId' => 'required|string',
+            'items'             => 'required|array|min:1',
+            'items.*.modelId'   => 'required|integer',
+            'items.*.count'     => 'required|integer|min:1',
+            'message'           => 'nullable|string|max:200',
+        ]);
+
+        $user = Auth::user();
+        $senderAvatarId = $user->defaultAvatar;
+        $recipientAvatarId = $validated['recipientAvatarId'];
+        $message = isset($validated['message']) ? trim($validated['message']) : '';
+
+        if (!$senderAvatarId) {
+            return response()->json(['success' => false, 'error' => 'No active avatar to gift from.'], 400);
+        }
+        if ($recipientAvatarId === $senderAvatarId) {
+            return response()->json(['success' => false, 'error' => 'You cannot gift items to yourself.'], 422);
+        }
+
+        $recipient = Avatars::where('avatar_id', $recipientAvatarId)->first();
+        if (!$recipient) {
+            return response()->json(['success' => false, 'error' => 'Recipient avatar not found.'], 404);
+        }
+
+        // Only gift to actual friends — never trust the client's list alone.
+        $isFriend = avatarFriends::where('avatar_id', $senderAvatarId)
+            ->where('friend_id', $recipientAvatarId)
+            ->exists();
+        if (!$isFriend) {
+            return response()->json(['success' => false, 'error' => 'You can only gift items to friends.'], 403);
+        }
+
+        // Collapse duplicate model ids in the payload into a single required total.
+        $required = [];
+        foreach ($validated['items'] as $line) {
+            $modelId = (int) $line['modelId'];
+            $required[$modelId] = ($required[$modelId] ?? 0) + (int) $line['count'];
+        }
+
+        try {
+            $gifted = DB::transaction(function () use ($required, $user, $senderAvatarId, $recipient, $recipientAvatarId, $message) {
+                $summary = [];
+
+                foreach ($required as $modelId => $count) {
+                    // Sender's spendable copies: owned, not placed in a space.
+                    $rows = avatarItems::where('user_id', $user->id)
+                        ->where('model_id', $modelId)
+                        ->whereNull('space_id')
+                        ->lockForUpdate()
+                        ->get();
+
+                    $available = 0;
+                    foreach ($rows as $row) {
+                        $available += (int) $row->item_count;
+                    }
+                    if ($available < $count) {
+                        throw new \RuntimeException("You don't have enough of item {$modelId} to gift.");
+                    }
+
+                    // Deduct from the sender, draining rows until the quantity is met.
+                    $remaining = $count;
+                    foreach ($rows as $row) {
+                        if ($remaining <= 0) break;
+                        $have = (int) $row->item_count;
+                        $take = min($have, $remaining);
+                        $remaining -= $take;
+                        if ($take >= $have) {
+                            $row->delete();
+                        } else {
+                            $row->item_count = $have - $take;
+                            $row->save();
+                        }
+                    }
+
+                    // Deliver a single fresh, gift-tagged stack to the recipient.
+                    avatarItems::create([
+                        'item_id'               => $this->makeItemGuid(),
+                        'model_id'              => $modelId,
+                        'item_count'            => $count,
+                        'user_id'               => $recipient->owner_id,
+                        'avatar_id'             => $recipientAvatarId,
+                        'item_gifted_by_avatar' => $senderAvatarId,
+                        'giftMessage'           => $message !== '' ? $message : null,
+                        'item_config'           => '',
+                    ]);
+
+                    // Durable transaction record — the recipient polls this to
+                    // learn they were gifted, and the sender polls it to learn
+                    // when the recipient likes it back. The client correlates its
+                    // local "sent" row to the eventual "liked" push by giftId.
+                    $gift = Gift::create([
+                        'sender_avatar_id'    => $senderAvatarId,
+                        'recipient_avatar_id' => $recipientAvatarId,
+                        'model_id'            => $modelId,
+                        'count'               => $count,
+                        'giftMessage'         => $message !== '' ? $message : null,
+                    ]);
+
+                    $summary[] = ['giftId' => $gift->id, 'modelId' => $modelId, 'count' => $count];
+                }
+
+                return $summary;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success'   => true,
+            'gifted'    => $gifted,
+            'recipient' => [
+                'avatarId'  => $recipientAvatarId,
+                'firstName' => $recipient->firstName,
+                'lastName'  => $recipient->lastName,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Poll for gifting activity the current player's client hasn't shown yet.
+     *
+     * Returns two lists, both keyed by the durable gift id:
+     *   received — gifts delivered TO me that I haven't been notified of yet.
+     *              Fetching them stamps seen_at, so each surfaces exactly once.
+     *   likes    — gifts I SENT that the recipient has since liked and that I
+     *              haven't been told about yet. Fetching stamps liked_seen_at.
+     *
+     * This is the reliable, self-hosted-friendly transport behind the two-way
+     * gifting log. The Red5 socket push (giftReceived / giftLiked), when wired,
+     * carries the same shapes for instant delivery; the client dedupes by giftId
+     * so a gift that arrives over both paths is only ever shown once.
+     *
+     * Icons are returned as the raw model_icon (no host prefix), exactly like
+     * GET /api/inventory — the client prepends contentUrl + "assets/".
+     */
+    public function giftUpdates(Request $request)
+    {
+        $user = Auth::user();
+        $myAvatarId = $user->defaultAvatar;
+
+        if (!$myAvatarId) {
+            return response()->json(['received' => [], 'likes' => []], 200);
+        }
+
+        // --- Gifts delivered to me that I haven't seen yet ---
+        $incoming = Gift::where('recipient_avatar_id', $myAvatarId)
+            ->whereNull('seen_at')
+            ->orderBy('id')
+            ->get();
+
+        $received = [];
+        foreach ($incoming as $g) {
+            $sender = Avatars::where('avatar_id', $g->sender_avatar_id)->first();
+            $model  = items::where('model_id', $g->model_id)->first();
+
+            $received[] = [
+                'giftId'       => $g->id,
+                'fromAvatarId' => $g->sender_avatar_id,
+                'fromName'     => $sender ? trim($sender->firstName . ' ' . $sender->lastName) : 'A friend',
+                'itemName'     => $model ? ($model->model_desc ?: $model->model_details) : 'Item',
+                'icon'         => $model ? $model->model_icon : null,
+                'qty'          => (int) $g->count,
+                'message'      => $g->giftMessage ?? '',
+                'ts'           => $g->created_at ? (int) ($g->created_at->timestamp * 1000) : null,
+            ];
+        }
+        if (count($incoming)) {
+            Gift::whereIn('id', $incoming->pluck('id'))->update(['seen_at' => now()]);
+        }
+
+        // --- Likes on gifts I sent that I haven't been told about yet ---
+        $likedGifts = Gift::where('sender_avatar_id', $myAvatarId)
+            ->whereNotNull('liked_at')
+            ->whereNull('liked_seen_at')
+            ->orderBy('liked_at')
+            ->get();
+
+        $likes = [];
+        foreach ($likedGifts as $g) {
+            $recipient = Avatars::where('avatar_id', $g->recipient_avatar_id)->first();
+            $likes[] = [
+                'giftId' => $g->id,
+                'byName' => $recipient ? trim($recipient->firstName . ' ' . $recipient->lastName) : 'A friend',
+                'ts'     => $g->liked_at ? (int) ($g->liked_at->timestamp * 1000) : null,
+            ];
+        }
+        if (count($likedGifts)) {
+            Gift::whereIn('id', $likedGifts->pluck('id'))->update(['liked_seen_at' => now()]);
+        }
+
+        return response()->json(['received' => $received, 'likes' => $likes], 200);
+    }
+
+    /**
+     * Record that the current player liked a gift they received. Idempotent — a
+     * second like is a no-op. The original sender learns about it on their next
+     * giftUpdates poll (or instantly via the giftLiked socket push).
+     */
+    public function giftLike(Request $request)
+    {
+        $validated = $request->validate([
+            'giftId' => 'required|integer',
+        ]);
+
+        $user = Auth::user();
+        $myAvatarId = $user->defaultAvatar;
+
+        $gift = Gift::where('id', $validated['giftId'])
+            ->where('recipient_avatar_id', $myAvatarId)
+            ->first();
+
+        if (!$gift) {
+            return response()->json(['success' => false, 'error' => 'Gift not found.'], 404);
+        }
+
+        if (!$gift->liked_at) {
+            $gift->liked_at = now();
+            $gift->save();
+        }
+
+        return response()->json(['success' => true, 'giftId' => $gift->id], 200);
+    }
+
+    /**
+     * Fresh 20-char hex id for a new avatar_items row — same shape as the guids
+     * used elsewhere for inventory rows, without the nested-function pitfalls.
+     */
+    private function makeItemGuid()
+    {
+        $charid = md5(uniqid(mt_rand(), true));
+        return substr($charid, 0, 8)
+            . substr($charid, 8, 4)
+            . substr($charid, 12, 4)
+            . substr($charid, 16, 4);
     }
 
 }
