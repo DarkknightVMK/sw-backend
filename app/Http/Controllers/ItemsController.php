@@ -8,6 +8,7 @@ use App\Models\items;
 use App\Models\avatarItems;
 use App\Models\Avatars;
 use App\Models\avatarFriends;
+use App\Models\Gift;
 use App\Models\avatarWearing;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
@@ -388,7 +389,19 @@ class ItemsController extends Controller
                         'item_config'           => '',
                     ]);
 
-                    $summary[] = ['modelId' => $modelId, 'count' => $count];
+                    // Durable transaction record — the recipient polls this to
+                    // learn they were gifted, and the sender polls it to learn
+                    // when the recipient likes it back. The client correlates its
+                    // local "sent" row to the eventual "liked" push by giftId.
+                    $gift = Gift::create([
+                        'sender_avatar_id'    => $senderAvatarId,
+                        'recipient_avatar_id' => $recipientAvatarId,
+                        'model_id'            => $modelId,
+                        'count'               => $count,
+                        'giftMessage'         => $message !== '' ? $message : null,
+                    ]);
+
+                    $summary[] = ['giftId' => $gift->id, 'modelId' => $modelId, 'count' => $count];
                 }
 
                 return $summary;
@@ -406,6 +419,111 @@ class ItemsController extends Controller
                 'lastName'  => $recipient->lastName,
             ],
         ], 200);
+    }
+
+    /**
+     * Poll for gifting activity the current player's client hasn't shown yet.
+     *
+     * Returns two lists, both keyed by the durable gift id:
+     *   received — gifts delivered TO me that I haven't been notified of yet.
+     *              Fetching them stamps seen_at, so each surfaces exactly once.
+     *   likes    — gifts I SENT that the recipient has since liked and that I
+     *              haven't been told about yet. Fetching stamps liked_seen_at.
+     *
+     * This is the reliable, self-hosted-friendly transport behind the two-way
+     * gifting log. The Red5 socket push (giftReceived / giftLiked), when wired,
+     * carries the same shapes for instant delivery; the client dedupes by giftId
+     * so a gift that arrives over both paths is only ever shown once.
+     *
+     * Icons are returned as the raw model_icon (no host prefix), exactly like
+     * GET /api/inventory — the client prepends contentUrl + "assets/".
+     */
+    public function giftUpdates(Request $request)
+    {
+        $user = Auth::user();
+        $myAvatarId = $user->defaultAvatar;
+
+        if (!$myAvatarId) {
+            return response()->json(['received' => [], 'likes' => []], 200);
+        }
+
+        // --- Gifts delivered to me that I haven't seen yet ---
+        $incoming = Gift::where('recipient_avatar_id', $myAvatarId)
+            ->whereNull('seen_at')
+            ->orderBy('id')
+            ->get();
+
+        $received = [];
+        foreach ($incoming as $g) {
+            $sender = Avatars::where('avatar_id', $g->sender_avatar_id)->first();
+            $model  = items::where('model_id', $g->model_id)->first();
+
+            $received[] = [
+                'giftId'       => $g->id,
+                'fromAvatarId' => $g->sender_avatar_id,
+                'fromName'     => $sender ? trim($sender->firstName . ' ' . $sender->lastName) : 'A friend',
+                'itemName'     => $model ? ($model->model_desc ?: $model->model_details) : 'Item',
+                'icon'         => $model ? $model->model_icon : null,
+                'qty'          => (int) $g->count,
+                'message'      => $g->giftMessage ?? '',
+                'ts'           => $g->created_at ? (int) ($g->created_at->timestamp * 1000) : null,
+            ];
+        }
+        if (count($incoming)) {
+            Gift::whereIn('id', $incoming->pluck('id'))->update(['seen_at' => now()]);
+        }
+
+        // --- Likes on gifts I sent that I haven't been told about yet ---
+        $likedGifts = Gift::where('sender_avatar_id', $myAvatarId)
+            ->whereNotNull('liked_at')
+            ->whereNull('liked_seen_at')
+            ->orderBy('liked_at')
+            ->get();
+
+        $likes = [];
+        foreach ($likedGifts as $g) {
+            $recipient = Avatars::where('avatar_id', $g->recipient_avatar_id)->first();
+            $likes[] = [
+                'giftId' => $g->id,
+                'byName' => $recipient ? trim($recipient->firstName . ' ' . $recipient->lastName) : 'A friend',
+                'ts'     => $g->liked_at ? (int) ($g->liked_at->timestamp * 1000) : null,
+            ];
+        }
+        if (count($likedGifts)) {
+            Gift::whereIn('id', $likedGifts->pluck('id'))->update(['liked_seen_at' => now()]);
+        }
+
+        return response()->json(['received' => $received, 'likes' => $likes], 200);
+    }
+
+    /**
+     * Record that the current player liked a gift they received. Idempotent — a
+     * second like is a no-op. The original sender learns about it on their next
+     * giftUpdates poll (or instantly via the giftLiked socket push).
+     */
+    public function giftLike(Request $request)
+    {
+        $validated = $request->validate([
+            'giftId' => 'required|integer',
+        ]);
+
+        $user = Auth::user();
+        $myAvatarId = $user->defaultAvatar;
+
+        $gift = Gift::where('id', $validated['giftId'])
+            ->where('recipient_avatar_id', $myAvatarId)
+            ->first();
+
+        if (!$gift) {
+            return response()->json(['success' => false, 'error' => 'Gift not found.'], 404);
+        }
+
+        if (!$gift->liked_at) {
+            $gift->liked_at = now();
+            $gift->save();
+        }
+
+        return response()->json(['success' => true, 'giftId' => $gift->id], 200);
     }
 
     /**
