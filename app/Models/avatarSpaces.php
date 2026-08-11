@@ -35,6 +35,11 @@ class avatarSpaces extends Model
         'user_id',
         'lastPurchasedTokens',
         'lastPurchasedAmount',
+        // Space-settings editor: visual theme + decor surfaces (short preset
+        // keys, nullable → fall back to the space model's default look).
+        'theme',
+        'wallpaper',
+        'flooring',
 
 
         ];
@@ -55,6 +60,17 @@ public function avatar() {
 
 public function models() {
     return $this->belongsTo(spaceModels::class, 'model_id');
+}
+
+// Space-settings editor relationships. Members carry a role (space_roles);
+// bans are the boot/block list. Both cascade-delete with the space at the
+// DB level (see the space_members / space_bans migrations).
+public function members() {
+    return $this->hasMany(spaceMember::class, 'space_id', 'id');
+}
+
+public function bans() {
+    return $this->hasMany(spaceBans::class, 'space_id', 'id');
 }
 
 

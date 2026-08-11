@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SpaceController;
+use App\Http\Controllers\SpaceSettingsController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\CatalogItemEntryController;
@@ -151,6 +152,20 @@ Route::group(['middleware' => ['swHeader']], function ()
     Route::get('/spaces/favs', [SpaceController::class, 'myFavs']);
     Route::get('/spaces/me', [SpaceController::class, 'meSpaces']);
     Route::get('/spaces/popular', [SpaceController::class, 'popSpaces']);
+
+    // ── Space settings editor (owner-only; controller enforces ownership) ──
+    Route::get('/spaces/{id}/meta',              [SpaceSettingsController::class, 'meta']);
+    Route::patch('/spaces/{id}',                 [SpaceSettingsController::class, 'update']);
+    Route::get('/spaces/{id}/members',           [SpaceSettingsController::class, 'members']);
+    Route::get('/spaces/{id}/roles',             [SpaceSettingsController::class, 'roles']);
+    Route::post('/spaces/{id}/members',          [SpaceSettingsController::class, 'addMember']);
+    Route::patch('/spaces/{id}/members/{memberId}', [SpaceSettingsController::class, 'updateMember']);
+    Route::delete('/spaces/{id}/members/{memberId}', [SpaceSettingsController::class, 'removeMember']);
+    Route::get('/spaces/{id}/bans',              [SpaceSettingsController::class, 'bans']);
+    Route::post('/spaces/{id}/bans',             [SpaceSettingsController::class, 'addBan']);
+    Route::delete('/spaces/{id}/bans/{banId}',   [SpaceSettingsController::class, 'removeBan']);
+    Route::get('/spaces/{id}/avatar-search',     [SpaceSettingsController::class, 'avatarSearch']);
+
     Route::get('/items/generate/{id}/{model}', [ItemsController::class, 'createItemsbyModel']);
     Route::get('/items/make/all/{id}', [ItemsController::class, 'generateAll']);
     Route::get('/catalog', [CatalogItemEntryController::class, 'index']);
