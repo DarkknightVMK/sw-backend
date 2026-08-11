@@ -7,8 +7,10 @@ use Illuminate\Http\Request;
 use App\Models\items;
 use App\Models\avatarItems;
 use App\Models\Avatars;
+use App\Models\avatarFriends;
 use App\Models\avatarWearing;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 use function App\Http\Controllers\create_guid as ControllersCreate_guid;
 
@@ -278,9 +280,145 @@ class ItemsController extends Controller
 
 
 
-        
-        
+
+
         return response($response, 200);
+    }
+
+    /**
+     * Gift one or more owned items to a friend's avatar.
+     *
+     * Body: {
+     *   recipientAvatarId: string,           // friend's avatar_id (friend.friend_id)
+     *   items: [{ modelId: int, count: int }],
+     *   message?: string                     // optional note (<= 200 chars)
+     * }
+     *
+     * Deducts the items from the sender's inventory and creates fresh, gift-tagged
+     * rows in the recipient's inventory inside a single transaction, so a partial
+     * transfer can never happen. `item_gifted_by_avatar` + `giftMessage` carry the
+     * gift metadata the client's transaction log reads back.
+     */
+    public function gift(Request $request)
+    {
+        $validated = $request->validate([
+            'recipientAvatarId' => 'required|string',
+            'items'             => 'required|array|min:1',
+            'items.*.modelId'   => 'required|integer',
+            'items.*.count'     => 'required|integer|min:1',
+            'message'           => 'nullable|string|max:200',
+        ]);
+
+        $user = Auth::user();
+        $senderAvatarId = $user->defaultAvatar;
+        $recipientAvatarId = $validated['recipientAvatarId'];
+        $message = isset($validated['message']) ? trim($validated['message']) : '';
+
+        if (!$senderAvatarId) {
+            return response()->json(['success' => false, 'error' => 'No active avatar to gift from.'], 400);
+        }
+        if ($recipientAvatarId === $senderAvatarId) {
+            return response()->json(['success' => false, 'error' => 'You cannot gift items to yourself.'], 422);
+        }
+
+        $recipient = Avatars::where('avatar_id', $recipientAvatarId)->first();
+        if (!$recipient) {
+            return response()->json(['success' => false, 'error' => 'Recipient avatar not found.'], 404);
+        }
+
+        // Only gift to actual friends — never trust the client's list alone.
+        $isFriend = avatarFriends::where('avatar_id', $senderAvatarId)
+            ->where('friend_id', $recipientAvatarId)
+            ->exists();
+        if (!$isFriend) {
+            return response()->json(['success' => false, 'error' => 'You can only gift items to friends.'], 403);
+        }
+
+        // Collapse duplicate model ids in the payload into a single required total.
+        $required = [];
+        foreach ($validated['items'] as $line) {
+            $modelId = (int) $line['modelId'];
+            $required[$modelId] = ($required[$modelId] ?? 0) + (int) $line['count'];
+        }
+
+        try {
+            $gifted = DB::transaction(function () use ($required, $user, $senderAvatarId, $recipient, $recipientAvatarId, $message) {
+                $summary = [];
+
+                foreach ($required as $modelId => $count) {
+                    // Sender's spendable copies: owned, not placed in a space.
+                    $rows = avatarItems::where('user_id', $user->id)
+                        ->where('model_id', $modelId)
+                        ->whereNull('space_id')
+                        ->lockForUpdate()
+                        ->get();
+
+                    $available = 0;
+                    foreach ($rows as $row) {
+                        $available += (int) $row->item_count;
+                    }
+                    if ($available < $count) {
+                        throw new \RuntimeException("You don't have enough of item {$modelId} to gift.");
+                    }
+
+                    // Deduct from the sender, draining rows until the quantity is met.
+                    $remaining = $count;
+                    foreach ($rows as $row) {
+                        if ($remaining <= 0) break;
+                        $have = (int) $row->item_count;
+                        $take = min($have, $remaining);
+                        $remaining -= $take;
+                        if ($take >= $have) {
+                            $row->delete();
+                        } else {
+                            $row->item_count = $have - $take;
+                            $row->save();
+                        }
+                    }
+
+                    // Deliver a single fresh, gift-tagged stack to the recipient.
+                    avatarItems::create([
+                        'item_id'               => $this->makeItemGuid(),
+                        'model_id'              => $modelId,
+                        'item_count'            => $count,
+                        'user_id'               => $recipient->owner_id,
+                        'avatar_id'             => $recipientAvatarId,
+                        'item_gifted_by_avatar' => $senderAvatarId,
+                        'giftMessage'           => $message !== '' ? $message : null,
+                        'item_config'           => '',
+                    ]);
+
+                    $summary[] = ['modelId' => $modelId, 'count' => $count];
+                }
+
+                return $summary;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success'   => true,
+            'gifted'    => $gifted,
+            'recipient' => [
+                'avatarId'  => $recipientAvatarId,
+                'firstName' => $recipient->firstName,
+                'lastName'  => $recipient->lastName,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Fresh 20-char hex id for a new avatar_items row — same shape as the guids
+     * used elsewhere for inventory rows, without the nested-function pitfalls.
+     */
+    private function makeItemGuid()
+    {
+        $charid = md5(uniqid(mt_rand(), true));
+        return substr($charid, 0, 8)
+            . substr($charid, 8, 4)
+            . substr($charid, 12, 4)
+            . substr($charid, 16, 4);
     }
 
 }

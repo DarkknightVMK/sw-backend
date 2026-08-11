@@ -136,6 +136,7 @@ Route::group(['middleware' => ['swHeader']], function ()
     Route::post('/compress', Utils::class.'@compress')->name('compress');
     Route::post('/decompress', Utils::class.'@decompress')->name('decompress');
     Route::get('/inventory' , [ItemsController::class, 'getInventory']);
+    Route::post('/gift', [ItemsController::class, 'gift']);
     // Route::post('/items/add/{id}', [ItemsController::class, 'storeModel']);
     
     //  php memory hog, but it works. keep commented when not needed
