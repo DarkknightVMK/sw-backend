@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Little Worlds — Mission Studio (tester)</title>
+<style>
+:root{
+  --bg:#0c3a49; --panel:linear-gradient(175deg,#62CEE8 0%,#4BBBD6 100%);
+  --band:rgba(0,0,0,.28); --block:rgba(255,255,255,.10); --ctrl:rgba(0,0,0,.22);
+  --line:rgba(255,255,255,.16); --txt:#fff; --muted:rgba(255,255,255,.62); --accent:#1C6282;
+  --btn:linear-gradient(180deg,#ffbb38,#df7800); --ok:#4ade80; --bad:#ff8080;
+  --mono:ui-monospace,Menlo,Consolas,monospace; --font:'Nunito',system-ui,sans-serif;
+  --t-action:#5dd0ff;--t-constraint:#ffbb38;--t-completion:#4ade80;--t-subtask:#7c8cff;--t-hint:#c084fc;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);color:var(--txt);
+  background:radial-gradient(1200px 700px at 50% -10%,#2b8fab,#0c3a49 60%,#07222b);min-height:100vh}
+header{padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:900;margin:0;text-shadow:0 2px 4px rgba(0,0,0,.4)}
+header .sub{font:12px var(--mono);color:var(--muted)}
+#status{margin-left:auto;font:12px var(--mono);font-weight:800;padding:5px 12px;border-radius:20px;background:rgba(0,0,0,.25)}
+#status.ok{background:linear-gradient(180deg,#2f9d5f,#1c6b40);color:#c9ffe0}
+#status.err{background:linear-gradient(180deg,#c94c4c,#8f2b2b);color:#ffd9d9}
+/* windowed shell (SmallWorlds-style: sidebar tabs | main | detail) */
+.window{max-width:1180px;margin:12px auto;background:var(--panel);border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.14);overflow:hidden;
+  display:flex;flex-direction:column;height:calc(100vh - 24px)}
+.titlebar{background:var(--band);padding:9px 14px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.titlebar h1{font-size:15px;font-weight:900;margin:0}
+.titlebar .sub{font:11px var(--mono);color:var(--muted)}
+#status{margin-left:auto;font:11.5px var(--mono);font-weight:800;padding:4px 11px;border-radius:20px;background:rgba(0,0,0,.25)}
+#status.ok{background:linear-gradient(180deg,#2f9d5f,#1c6b40);color:#c9ffe0}
+#status.err{background:linear-gradient(180deg,#c94c4c,#8f2b2b);color:#ffd9d9}
+.close{width:24px;height:24px;border-radius:50%;border:1.5px solid rgba(255,255,255,.9);
+  background:radial-gradient(circle at 40% 35%,#F55050,#C82020);color:#fff;font-size:11px;font-weight:900;cursor:pointer;flex-shrink:0}
+.layout{display:grid;grid-template-columns:180px 1fr 320px;flex:1;min-height:0}
+@media(max-width:960px){.layout{grid-template-columns:1fr;overflow:auto}}
+.sidebar{background:rgba(0,0,0,.16);border-right:1px solid var(--line);padding:10px 0;overflow:auto}
+.s-item{padding:9px 16px;font-size:14px;font-weight:800;color:rgba(255,255,255,.82);cursor:pointer;
+  border-left:3px solid transparent;display:flex;align-items:center;gap:9px}
+.s-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.s-item.active{background:rgba(255,255,255,.15);color:#fff;border-left-color:#ffbb38}
+.s-item .badge2{margin-left:auto;font:10px var(--mono);background:rgba(255,187,56,.3);border:1px solid #ffbb38;border-radius:10px;padding:0 6px}
+.s-sep{height:1px;background:var(--line);margin:8px 12px}
+.main{padding:14px 16px;overflow:auto;min-height:0}
+.rightcol{background:rgba(0,0,0,.10);border-left:1px solid var(--line);padding:0;overflow:auto;min-height:0;display:flex;flex-direction:column}
+.pane{display:none}
+.pane.active{display:block}
+.pane-title{font-size:15px;font-weight:900;margin:0 0 12px}
+.rc-sec{padding:11px 12px}
+.rc-sec+.rc-sec{border-top:1px solid var(--line)}
+.rc-head{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;color:rgba(255,255,255,.85);
+  margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.rc-head .c{margin-left:auto;font:11px var(--mono);color:var(--muted)}
+.body{padding:0}
+/* admin-gated bits (hidden for regular players) */
+.admin-only{display:none}
+.window.admin .admin-only{display:revert}
+.window.admin .s-item.admin-only{display:flex}
+.window.admin .rc-sec.admin-only{display:flex}
+/* numbered task cards */
+.taskcard{background:rgba(0,0,0,.14);border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin-bottom:9px}
+.taskhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.tasknum{font-size:11px;font-weight:900;background:#ffbb38;color:#5a2e00;border-radius:8px;padding:2px 8px;flex:none}
+.taskname{flex:1}
+.tasksub{margin-top:8px;padding-top:7px;border-top:1px dashed var(--line)}
+.tasksub>.lbl{margin-top:0}
+.admintoggle{font-size:11.5px;font-weight:800;color:rgba(255,255,255,.88);display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap}
+.admintoggle input{width:15px;height:15px;padding:0;margin:0;accent-color:#ffbb38;cursor:pointer;flex:none}
+.admin-label{font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:2px 16px 4px}
+.steptitle{font-size:13px;font-weight:900;margin:15px 0 9px;padding-top:12px;border-top:1px solid var(--line)}
+.steptitle .opt{margin-left:6px}
+.lbl{font-size:10.5px;font-weight:900;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px}
+.lbl:first-child{margin-top:0}
+.opt{text-transform:none;color:var(--muted);font-weight:700}
+input,select,textarea{width:100%;background:rgba(255,255,255,.92);border:none;border-radius:9px;color:var(--accent);
+  padding:7px 9px;font-family:inherit;font-size:12.5px;font-weight:700}
+select{cursor:pointer}
+textarea{font-family:var(--mono);font-weight:600;resize:vertical}
+.row{display:flex;gap:7px}.row>*{flex:1}
+.btn{font-family:inherit;font-size:12.5px;font-weight:800;padding:7px 13px;border-radius:20px;border:1px solid var(--line);
+  cursor:pointer;color:#fff;background:rgba(255,255,255,.16);text-shadow:0 1px 2px rgba(0,0,0,.4);transition:.12s}
+.btn:hover{background:rgba(255,255,255,.28)}
+.btn.primary{background:var(--btn);box-shadow:0 3px 8px rgba(0,0,0,.35)}
+.btn.sm{padding:5px 10px;font-size:11.5px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btnrow{display:flex;flex-wrap:wrap;gap:6px}
+.card{background:var(--block);border:1px solid var(--line);border-radius:11px;padding:8px 10px;margin-bottom:7px}
+.chead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;font-weight:800}
+.rm:hover{color:var(--bad)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
+.t-action{background:var(--t-action)}.t-constraint{background:var(--t-constraint)}
+.t-completion{background:var(--t-completion)}.t-subtask{background:var(--t-subtask)}.t-hint{background:var(--t-hint)}
+.pgroup{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+.prow{display:flex;align-items:center;gap:7px}
+.prow label{font-size:11px;color:rgba(255,255,255,.85);min-width:120px;flex-shrink:0}
+.mission{background:var(--block);border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-bottom:8px}
+.mtop{display:flex;align-items:center;gap:8px}
+.mid{font-weight:900;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font:10.5px var(--mono);font-weight:800;padding:2px 9px;border-radius:12px}
+.badge.active{background:rgba(255,255,255,.16)}.badge.done{background:linear-gradient(180deg,#2f9d5f,#1c6b40);color:#c9ffe0}
+.steps{margin-top:6px;font-size:11.5px;color:rgba(255,255,255,.9);font-weight:700}
+.steps div{padding:1px 0}
+.prog{height:7px;background:rgba(0,0,0,.28);border-radius:5px;margin-top:7px;overflow:hidden}
+.prog>i{display:block;height:100%;width:0;background:var(--btn);transition:width .25s}
+.pill{display:inline-block;font:11px var(--mono);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:2px 8px;margin:2px 4px 2px 0}
+#log{font:11.5px var(--mono);font-weight:600;max-height:340px;overflow:auto;background:rgba(0,0,0,.22);border-radius:10px;padding:6px 8px}
+#log .l{padding:2px 6px;border-radius:5px;margin-bottom:2px}
+.l.fire{background:rgba(93,208,255,.14);color:#bfeeff}.l.done{background:rgba(74,222,128,.16);color:#c9ffd8}
+.l.prog{background:rgba(255,187,56,.16);color:#ffe0a6}.l.err{background:rgba(255,128,128,.2);color:#ffd0d0}.l.info{color:var(--muted)}
+.hint{font-size:11px;color:var(--muted);font-weight:700;margin-top:5px}
+code{font-family:var(--mono);background:rgba(0,0,0,.25);padding:1px 5px;border-radius:4px}
+.blockref{font:11px var(--mono);color:#eaffff;padding:2px 0}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.3);border-radius:5px}
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <h1>🎬 Mission Studio</h1>
+    <span class="sub">live tester</span>
+    <span id="status">loading…</span>
+    <label class="admintoggle"><input type="checkbox" id="adminChk" onchange="toggleAdmin()" /> Admin view</label>
+    <button class="close" title="Reset (reload)" onclick="location.reload()">✕</button>
+  </div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="s-item active" data-tab="build">🛠️ Build</div>
+      <div class="s-sep admin-only"></div>
+      <div class="admin-label admin-only">Admin tools</div>
+      <div class="s-item admin-only" data-tab="player">🧑 Player</div>
+      <div class="s-item admin-only" data-tab="blocks">🧩 Blocks</div>
+    </aside>
+
+    <main class="main">
+      <!-- Player (admin) -->
+      <section class="pane" data-pane="player">
+        <div class="pane-title">🧑 Mock player</div>
+        <div class="body">
+        <div class="row">
+          <div><div class="lbl">Level</div><input id="plLevel" type="number" value="3" /></div>
+          <div><div class="lbl">Tokens</div><input id="plTokens" type="number" value="50" /></div>
+        </div>
+        <div class="lbl">Current space id</div><input id="plSpaceId" value="s-own" />
+        <div class="lbl">Current space name</div><input id="plSpaceName" value="Cove" />
+        <div class="lbl">Owned space ids <span class="opt">csv — drives “Home”</span></div>
+        <input id="plOwned" value="s-own,s-two" />
+        <div class="lbl">Others present <span class="opt">csv names — drives “people present”</span></div>
+        <input id="plOccupants" value="" placeholder="e.g. Buddy Bear, Yara Y" />
+        <button class="btn primary sm" style="width:100%;margin-top:9px" onclick="rebuild()">↻ Apply player</button>
+        <div class="hint" id="clockNote"></div>
+        </div>
+      </section>
+
+      <!-- Blocks -->
+      <section class="pane" data-pane="blocks">
+        <div class="pane-title">🧩 Registered blocks <span class="opt" id="blkCount"></span></div>
+        <div id="blockRef"></div>
+      </section>
+
+      <!-- Build: mission → tasks → test, one seamless flow -->
+      <section class="pane active" data-pane="build">
+        <div class="pane-title">🛠️ Build a mission <span class="opt">step by step</span></div>
+        <div class="body">
+        <div class="steptitle" style="margin-top:0;border-top:none;padding-top:0">1 · Mission details</div>
+        <div class="row">
+          <div style="flex:1.3"><div class="lbl">Mission id</div><input id="mId" value="demo" /></div>
+          <div><div class="lbl">Title</div><input id="mTitle" value="My Mission" /></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div><div class="lbl">Min level</div><input id="mMinLevel" type="number" value="0" /></div>
+          <div><div class="lbl">Entry fee</div><input id="mFee" type="number" value="0" /></div>
+          <div><div class="lbl">Follow-on</div><select id="mFollow"><option value="">None</option></select></div>
+        </div>
+
+        <div class="steptitle">2 · Tasks <span class="opt">each is numbered &amp; completes on its own</span>
+          <button class="btn sm" style="margin-left:auto" onclick="addTask()">+ Add task</button></div>
+        <div id="taskList"></div>
+
+        <div class="btnrow" style="margin-top:12px">
+          <button class="btn primary" onclick="saveActivate()">▶ Save &amp; activate</button>
+          <button class="btn sm" onclick="saveOnly()">Save only</button>
+          <button class="btn sm" onclick="loadPreset('collect')">Preset: 1 task</button>
+          <button class="btn sm" onclick="loadPreset('twostep')">Preset: 2 tasks</button>
+          <button class="btn sm" onclick="loadPreset('home')">Preset: home-gated</button>
+        </div>
+        <div id="composeMsg" class="hint"></div>
+
+        <div class="steptitle">3 · Test your mission <span class="opt">fire events to complete it</span></div>
+        <div class="lbl">Target mission <span class="opt">for item/complete events</span></div>
+        <select id="target"></select>
+        <div class="row" style="margin-top:8px">
+          <input id="evText" placeholder="text / anim / item / emote name" />
+          <input id="evExtra" placeholder="target / recipient (optional)" />
+        </div>
+        <div class="btnrow" style="margin-top:8px">
+          <button class="btn sm" onclick="fire('enter')">🚪 Enter space</button>
+          <button class="btn sm" onclick="fire('talk')">💬 Say</button>
+          <button class="btn sm" onclick="fire('whisper')">🤫 Whisper</button>
+          <button class="btn sm" onclick="fire('animate')">🕺 Perform</button>
+          <button class="btn sm" onclick="fire('emote')">😀 Emote</button>
+          <button class="btn sm" onclick="fire('use')">🧴 Use item</button>
+          <button class="btn sm" onclick="fire('update')">📦 Update +1</button>
+          <button class="btn sm" onclick="fire('complete')">✅ Complete</button>
+          <button class="btn sm" onclick="fire('time')">⏱️ Time</button>
+          <button class="btn sm" onclick="fire('purchase')">🛒 Purchase</button>
+        </div>
+        <div class="hint">Events flow through the real TriggerBus (info builders + your mock world).</div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Persistent detail column: Missions + Log -->
+    <aside class="rightcol">
+      <div class="rc-sec">
+        <div class="rc-head">🎯 Missions <span class="c" id="mCount"></span></div>
+        <div id="missionList"><span class="hint">Nothing yet.</span></div>
+      </div>
+      <div class="rc-sec admin-only" style="flex:1;flex-direction:column;min-height:0">
+        <div class="rc-head">📜 Log <span class="opt" style="font-weight:700">admin</span><button class="btn sm" style="margin-left:auto" onclick="document.getElementById('log').innerHTML=''">clear</button></div>
+        <div id="log" style="flex:1;max-height:none"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// Tab switching — independent of the engine module below.
+document.getElementById('sidebar').addEventListener('click', (e) => {
+  const item = e.target.closest('.s-item'); if (!item) return;
+  document.querySelectorAll('.s-item').forEach(s => s.classList.toggle('active', s === item));
+  const tab = item.dataset.tab;
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+});
+</script>
+
+<script type="module">
+import {
+  BlockRegistry, CompositionParser, MissionRunner, registerCoreBlocks,
+  MissionKeyStore, MissionActionsUser, TriggerBus, MockTriggerContext, IntermediateMissionResult,
+} from './src/renderer/engine/missions/index.js'
+
+const $ = id => document.getElementById(id)
+const S = {}   // engine singletons
+const saved = new Map()   // id -> {id,title,minLevel,fee,follow,comp,art}
+const missions = new Map()// id -> {completed, blocks}
+let updN = 0
+
+function log(m, cls='info'){ const e=document.createElement('div'); e.className='l '+cls
+  e.textContent = new Date().toLocaleTimeString('en-US',{hour12:false})+'  '+m; $('log').prepend(e) }
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+function boot(){
+  const registry=new BlockRegistry(), parser=new CompositionParser(registry), runner=new MissionRunner()
+  const keyStore=new MissionKeyStore(), actionsUser=new MissionActionsUser(keyStore)
+  registerCoreBlocks(registry, actionsUser)
+  runner.onComplete(id => {
+    const m=missions.get(id); if(m)m.completed=true
+    log('🏁 COMPLETE → '+id,'done')
+    // follow-on chaining (mirrors the store)
+    const follow=saved.get(id)?.follow
+    if(follow && saved.has(follow) && !isActive(follow) && !missions.get(follow)?.completed){
+      log('   ↳ auto-activating follow-on: '+follow,'info'); activate(follow)
+    }
+    render()
+  })
+  Object.assign(S,{registry,parser,runner,keyStore})
+  rebuild(); renderBlockRef()
+  $('status').textContent='engine ready · '+registry.size+' blocks'; $('status').className='ok'
+  $('blkCount').textContent=registry.size+' blocks'
+  addTask()   // start with one task
+  log('engine booted — '+registry.size+' blocks','done')
+}
+
+window.rebuild = () => {
+  const owned = $('plOwned').value.split(',').map(s=>s.trim()).filter(Boolean)
+  const occ   = $('plOccupants').value.split(',').map(s=>s.trim()).filter(Boolean)
+    .map((n,i)=>({id:'occ'+i, fullName:n, firstName:n.split(' ')[0]||n}))
+  S.ctx = new MockTriggerContext({
+    keyStore:S.keyStore, localAvatarId:'me',
+    space:{ spaceId:$('plSpaceId').value.trim(), ownerId:'owner', modelId:'m', name:$('plSpaceName').value.trim() },
+    spaceAvatars: occ, homeSpaceIds: owned,
+  })
+  S.bus = new TriggerBus(S.runner, S.ctx)
+  const now=new Date()
+  $('clockNote').textContent = `world clock: ${now.toLocaleDateString('en-US',{weekday:'short'})} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} — time/day/date conditions match real "now".`
+  log(`player: L${$('plLevel').value} · ${$('plTokens').value} tokens · space "${$('plSpaceName').value}" (${$('plSpaceId').value}) · ${occ.length} others · owns [${owned.join(', ')||'—'}]`)
+}
+
+const player = () => ({ level:+$('plLevel').value||0, tokens:+$('plTokens').value })
+
+// ── block pickers ─────────────────────────────────────────────────────────────
+function blocksOf(type){ return S.registry.list().filter(([,d])=>d.type===type).map(([ref,d])=>({ref,name:d.name})) }
+function fillPicker(sel, type, placeholder){
+  sel.innerHTML = (placeholder?`<option value="">${placeholder}</option>`:'') +
+    blocksOf(type).map(b=>`<option value="${b.ref}">${b.name}</option>`).join('')
+}
+function renderBlockRef(){
+  $('blockRef').innerHTML = S.registry.list().map(([ref,d])=>
+    `<div class="blockref"><span class="dot t-${d.type}"></span>${ref}</div>`).join('')
+}
+
+// generic param editor: returns array of {schema,input} bound live
+function paramInputs(ref, container, values){
+  container.innerHTML=''
+  const def=S.registry.resolve(ref); const schema=def?.paramSchema??[]
+  const vals = values ?? schema.map(s=>s.type==='hidden'?(s.sentinel??''):(s.default??''))
+  schema.forEach((s,i)=>{
+    if(s.type==='hidden') return
+    const row=document.createElement('div'); row.className='prow'
+    const lab=document.createElement('label'); lab.textContent=s.label||('param '+i)
+    const inp=document.createElement('input'); inp.type=s.type==='number'?'number':'text'
+    inp.value=vals[i]??''; inp.placeholder=s.hint||''
+    inp.oninput=()=>{ vals[i]=inp.value }
+    row.append(lab,inp); container.appendChild(row)
+  })
+  return vals
+}
+
+// ── DOM helpers ─────────────────────────────────────────────────────────────
+function el(tag, cls){ const e=document.createElement(tag); if(cls)e.className=cls; return e }
+function lblEl(text, opt){ const d=el('div','lbl'); d.innerHTML=text+(opt?` <span class="opt">${opt}</span>`:''); return d }
+function optionsOf(type, placeholder){ return (placeholder?`<option value="">${placeholder}</option>`:'')+
+  blocksOf(type).map(b=>`<option value="${b.ref}">${b.name}</option>`).join('') }
+function defaults(def){ return (def?.paramSchema??[]).map(s=>s.type==='hidden'?(s.sentinel??''):(s.default??'')) }
+
+// ── tasks model: each task = {name, actRef, actVals, conds[], subs[], hints[]} ──
+let tasks=[]
+const firstAction = () => blocksOf('action')[0]?.ref ?? ''
+window.addTask = () => {
+  const ref=firstAction()
+  tasks.push({ name:'', actRef:ref, actVals:defaults(S.registry.resolve(ref)), conds:[], subs:[], hints:[] })
+  renderTasks()
+}
+function removeTask(i){ tasks.splice(i,1); renderTasks() }
+
+// a labelled add-row + editable list bound to arr (of {ref,vals})
+function subSection(title, opt, type, arr){
+  const box=el('div','tasksub'); box.append(lblEl(title, opt))
+  const row=el('div','row')
+  const sel=el('select'); sel.innerHTML=optionsOf(type,'— add —')
+  const add=el('button','btn sm'); add.textContent='+ Add'; add.style.flex='0 0 auto'
+  add.onclick=()=>{ if(!sel.value)return; arr.push({ref:sel.value,vals:null}); renderTasks() }
+  row.append(sel,add); box.append(row)
+  arr.forEach((it,idx)=>{
+    const def=S.registry.resolve(it.ref)
+    const c=el('div','card'); const h=el('div','chead')
+    h.innerHTML=`<span><span class="dot t-${def.type}"></span>${def.name}</span>`
+    const x=el('button','rm'); x.textContent='×'; x.onclick=()=>{ arr.splice(idx,1); renderTasks() }
+    h.append(x); c.append(h)
+    const pc=el('div','pgroup'); c.append(pc); it.vals=paramInputs(it.ref, pc, it.vals)
+    box.append(c)
+  })
+  return box
+}
+function renderTasks(){
+  const wrap=$('taskList'); wrap.innerHTML=''
+  if(!tasks.length){ wrap.innerHTML='<div class="hint">No tasks yet — click “+ Add task”.</div>'; return }
+  tasks.forEach((t,i)=>{
+    const card=el('div','taskcard')
+    const head=el('div','taskhead')
+    const num=el('span','tasknum'); num.textContent='Task '+(i+1); head.append(num)
+    const name=el('input','taskname'); name.value=t.name; name.placeholder='Task name (optional)'
+    name.oninput=()=>{ t.name=name.value }; head.append(name)
+    const rm=el('button','rm'); rm.textContent='× remove'; rm.onclick=()=>removeTask(i); head.append(rm)
+    card.append(head)
+    card.append(lblEl('Completed by','the task action'))
+    const sel=el('select'); sel.innerHTML=optionsOf('action'); sel.value=t.actRef
+    sel.onchange=()=>{ t.actRef=sel.value; t.actVals=defaults(S.registry.resolve(t.actRef)); renderTasks() }
+    card.append(sel)
+    const pc=el('div','pgroup'); card.append(pc); t.actVals=paramInputs(t.actRef, pc, t.actVals)
+    card.append(subSection('Extra conditions','gate this task','constraint',t.conds))
+    card.append(subSection('Subtasks','all must complete','action',t.subs))
+    card.append(subSection('Hints','optional','action',t.hints))
+    wrap.append(card)
+  })
+}
+
+// ── build composition ────────────────────────────────────────────────────────
+function resolved(ref, vals){
+  const s=S.registry.resolve(ref)?.paramSchema??[]
+  return s.map((sc,i)=> sc.type==='hidden' ? (sc.sentinel??'') : (vals?.[i] ?? sc.default ?? ''))
+}
+function buildBlocks(){
+  const mid=$('mId').value.trim()||'m'
+  const blocks=[]
+  // Multiple tasks (or any task with its own subtasks) → each task action becomes
+  // a subtask, so the mission completes when ALL tasks are done. A single simple
+  // task becomes the main action.
+  const asSub = tasks.length>1 || tasks.some(t=>t.subs.length>0)
+  tasks.forEach((t,i)=>{
+    if(t.actRef){
+      const params=resolved(t.actRef,t.actVals)
+      blocks.push(asSub ? {type:'subtask',ref:t.actRef,params,subtaskId:mid+'-t'+i}
+                        : {type:'action',ref:t.actRef,params})
+    }
+    t.conds.forEach(c=> blocks.push({type:'constraint',ref:c.ref,params:resolved(c.ref,c.vals)}))
+    t.hints.forEach(h=> blocks.push({type:'hint',ref:h.ref,params:resolved(h.ref,h.vals)}))
+    t.subs.forEach((s,j)=> blocks.push({type:'subtask',ref:s.ref,params:resolved(s.ref,s.vals),subtaskId:mid+'-t'+i+'s'+j}))
+  })
+  return blocks
+}
+
+// ── save + activate (activate mirrors store gate logic) ─────────────────────────
+function saveCurrent(){
+  const id=$('mId').value.trim(); if(!id) return null
+  const rec={ id, title:$('mTitle').value.trim()||id, minLevel:+$('mMinLevel').value||0,
+    fee:+$('mFee').value||0, follow:$('mFollow').value, comp:{blocks:buildBlocks()} }
+  saved.set(id, rec); refreshFollowOptions(); refreshTargets()
+  return rec
+}
+function isActive(id){ return missions.has(id) && !missions.get(id).completed }
+
+function activate(id){
+  const rec=saved.get(id); if(!rec) return {ok:false,reason:'not saved'}
+  if(isActive(id)) return {ok:true}
+  const p=player()
+  if(rec.minLevel>0 && p.level<rec.minLevel) return {ok:false,reason:`Requires level ${rec.minLevel} — you're level ${p.level}`}
+  if(rec.fee>0){ if(p.tokens<rec.fee) return {ok:false,reason:`Costs ${rec.fee} tokens — you have ${p.tokens}`}
+    $('plTokens').value = p.tokens-rec.fee }
+  const scripts=S.parser.parseLwJson(rec.comp)
+  S.runner.removeMission(id); S.runner.addMission({id,scripts})
+  missions.set(id,{completed:false, blocks:rec.comp.blocks})
+  return {ok:true}
+}
+
+window.saveOnly = () => { const r=saveCurrent(); if(r){ log('saved "'+r.id+'"'); render() } }
+window.saveActivate = () => {
+  const rec=saveCurrent(); if(!rec){ $('composeMsg').textContent='need a mission id'; return }
+  const res=activate(rec.id)
+  $('composeMsg').textContent = res.ok ? '' : '✗ '+res.reason
+  if(res.ok){ log('＋ activated "'+rec.id+'"','done') } else { log('✗ '+res.reason,'err') }
+  render()
+}
+
+function refreshFollowOptions(){
+  const cur=$('mId').value.trim()
+  $('mFollow').innerHTML='<option value="">None</option>'+
+    [...saved.keys()].filter(k=>k!==cur).map(k=>`<option value="${k}">${saved.get(k).title}</option>`).join('')
+}
+function refreshTargets(){
+  $('target').innerHTML = [...missions.keys()].map(k=>`<option value="${k}">${k}</option>`).join('') || '<option value="">— none —</option>'
+}
+
+// ── admin view toggle ────────────────────────────────────────────────────────
+window.toggleAdmin = () => {
+  const on = $('adminChk').checked
+  document.querySelector('.window').classList.toggle('admin', on)
+  if(!on){ // if viewing an admin-only tab, snap back to Build
+    const active = document.querySelector('.s-item.active')
+    if(active && active.classList.contains('admin-only'))
+      document.querySelector('.s-item[data-tab="build"]').click()
+  }
+}
+
+// ── presets (build a tasks[] set) ─────────────────────────────────────────────
+function mkTask(actRef, patch){
+  const t={ name:'', actRef, actVals:defaults(S.registry.resolve(actRef)), conds:[], subs:[], hints:[] }
+  if(patch) patch(t); return t
+}
+window.loadPreset = (k) => {
+  $('mMinLevel').value='0'; $('mFee').value='0'; $('mFollow').value=''
+  if(k==='collect'){ $('mId').value='collect'; $('mTitle').value='Collect 3'
+    tasks=[ mkTask('action/item/mission_update', t=>{ t.name='Gather items'; t.actVals[1]='3' }) ] }
+  if(k==='twostep'){ $('mId').value='twostep'; $('mTitle').value='Two-step quest'
+    tasks=[ mkTask('action/movement/enter_space', t=>{ t.name='Arrive'; t.actVals[0]='' }),
+            mkTask('action/avatar/talk',          t=>{ t.name='Announce'; t.actVals[0]='done' }) ] }
+  if(k==='home'){ $('mId').value='athome'; $('mTitle').value='At home'
+    tasks=[ mkTask('action/movement/enter_space', t=>{ t.name='Go home'; t.actVals[0]=''
+      t.conds.push({ref:'constraint/location/home',vals:null}) }) ] }
+  renderTasks()
+}
+
+// ── fire events ───────────────────────────────────────────────────────────────
+const meAvatar = { id:'me', fullName:'You', firstName:'You', isLocal:true, isUser:true }
+window.fire = (kind) => {
+  const t=$('evText').value.trim(), x=$('evExtra').value.trim(), tgt=$('target').value
+  let name, ev
+  switch(kind){
+    case 'enter':    name='SWAvatarEnterSpace'; ev={avatar:meAvatar}; break
+    case 'talk':     name='SWAvatarSpeech'; ev={avatar:meAvatar, text:t, whisper:false}; break
+    case 'whisper':  name='SWAvatarSpeech'; ev={avatar:meAvatar, text:t, whisper:true, whisperRecipient:{id:'r', fullName:x||'Someone'}}; break
+    case 'animate':  name='SWAvatarAnimate'; ev={avatar:meAvatar, animName:t||'dance', start:true}; break
+    case 'emote':    name='SWAvatarEmote'; ev={avatar:meAvatar, emote:{$name:t||'wave'}}; break
+    case 'use':      name='SWAvatarUseConsumable'; ev={avatar:meAvatar, modelName:t||'item', modelId:'m', targetAvatar:x?{id:'r',fullName:x}:{id:'me'}}; break
+    case 'update':   updN++; name='SWUpdateMission'; ev={missionId:tgt, item:{uid:'i'+updN, model:{name:t||'thing'}}, value:1}; break
+    case 'complete': name='SWCompleteMission'; ev={missionId:tgt}; break
+    case 'time':     name='SWTimeElapsed'; ev={startTime:0, duration:10}; break
+    case 'purchase': name='SWPurchaseItem'; ev={model:{id:'p', name:t||'gift'}, quantity:1}; break
+  }
+  try{ S.bus.emit(name, ev); log('↯ '+name+(t?' "'+t+'"':''),'fire'); refreshProgress() }
+  catch(e){ log('emit error: '+e.message,'err') }
+}
+
+// ── progress + render ───────────────────────────────────────────────────────────
+function refreshProgress(){
+  for(const [id,m] of missions){
+    const r=S.runner.getIntermediateResult(id)
+    if(r instanceof IntermediateMissionResult){ m.stage=r.intermediateStage; m.total=r.stageTotal
+      log('   ↳ '+id+' '+r.intermediateStage+'/'+r.stageTotal,'prog') }
+  }
+  render()
+}
+function render(){
+  $('mCount').textContent = missions.size || ''
+  refreshTargets()
+  const w=$('missionList')
+  if(!missions.size){ w.innerHTML='<span class="hint">Nothing yet.</span>'; return }
+  w.innerHTML=''
+  for(const [id,m] of missions){
+    const rec=saved.get(id)
+    const pct = m.total>0 ? Math.round(100*(m.stage||0)/m.total) : (m.completed?100:0)
+    const steps=(m.blocks||[]).map(b=>{
+      const def=S.registry.resolve(b.ref); const d=def?.getDescription?def.getDescription(b.params):b.ref
+      return `<div><span class="dot t-${b.type}"></span>${b.type}: ${d}</div>`}).join('')
+    const div=document.createElement('div'); div.className='mission'
+    div.innerHTML=`<div class="mtop"><span class="mid">${rec?.title||id}</span>
+      <span class="badge ${m.completed?'done':'active'}">${m.completed?'COMPLETE':'active'}</span></div>
+      <div class="steps">${steps}</div>
+      ${(m.total>0||m.completed)?`<div class="prog"><i style="width:${pct}%"></i></div>
+        <div class="hint" style="margin-top:3px">${m.completed?'done':(m.stage||0)+' / '+m.total}</div>`:''}
+      ${rec && (rec.minLevel||rec.fee||rec.follow)?`<div style="margin-top:5px">
+        ${rec.minLevel?`<span class="pill">min L${rec.minLevel}</span>`:''}
+        ${rec.fee?`<span class="pill">${rec.fee} tokens</span>`:''}
+        ${rec.follow?`<span class="pill">→ ${rec.follow}</span>`:''}</div>`:''}`
+    w.appendChild(div)
+  }
+}
+$('mId').addEventListener('input', refreshFollowOptions)
+
+try{ boot() }catch(e){ $('status').textContent='engine error'; $('status').className='err'; log('BOOT FAILED: '+e.message,'err'); console.error(e) }
+</script>
+</body>
+</html>

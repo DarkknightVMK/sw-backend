@@ -16,6 +16,35 @@
  */
 
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, normalize, extname } from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
+
+// Repo root (this file's dir) — used to serve the Mission Studio testers and the
+// mission engine modules as plain static files (native ES modules, no bundler).
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.xml': 'application/xml',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.map': 'application/json',
+};
+
+async function serveStatic(res, urlPath) {
+  const rel = urlPath === '/' ? '/mission-studio.html' : urlPath;
+  const filePath = normalize(join(ROOT, rel));
+  if (!filePath.startsWith(ROOT)) return false;        // block path traversal
+  const type = MIME[extname(filePath).toLowerCase()];
+  if (!type) return false;                             // only known static types
+  try {
+    const s = await stat(filePath);
+    if (!s.isFile()) return false;
+    const data = await readFile(filePath);
+    res.writeHead(200, { 'Content-Type': type, 'Access-Control-Allow-Origin': '*' });
+    res.end(data);
+    return true;
+  } catch { return false; }
+}
 
 const PORT = Number(process.env.VMK_PORT) || 8000;
 const ASSET_BASE = 'http://127.0.0.1:9001'; // the running asset server (port 9001)
@@ -160,6 +189,11 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { url: HEAD_URL });
   }
 
+  // ── Static: Mission Studio / Sandbox testers + the mission engine modules ────
+  // Served straight from disk (native ES modules), so opening
+  // http://localhost:8000/mission-studio.html runs the real mission engine.
+  if (method === 'GET' && await serveStatic(res, path)) return;
+
   // ── Everything else: valid-but-empty JSON so nothing 404s or throws ─────────
   console.log(`[vmk] ${line}  → {} (stub)`);
   return send(res, 200, {});
@@ -169,6 +203,9 @@ server.listen(PORT, () => {
   console.log('──────────────────────────────────────────────');
   console.log(`  VMK dev backend listening on http://localhost:${PORT}`);
   console.log(`  (stub for LittleWorlds — task-only, no real data)`);
-  console.log('  Any email/password logs in. Ctrl-C to stop.');
+  console.log('  Any email/password logs in.');
+  console.log(`  Mission Studio:  http://localhost:${PORT}/mission-studio.html`);
+  console.log(`  Mission Sandbox: http://localhost:${PORT}/mission-sandbox.html`);
+  console.log('  Ctrl-C to stop.');
   console.log('──────────────────────────────────────────────');
 });

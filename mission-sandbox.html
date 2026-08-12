@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Little Worlds — Mission Engine Sandbox</title>
+<style>
+/* ─── LittleWorlds design tokens (from styles/lw-tokens.css — the gifting-branch theme) ─── */
+:root{
+  --lw-overlay-bg:rgba(0,0,0,.5);
+  --lw-panel-bg:linear-gradient(175deg,#62CEE8 0%,#4BBBD6 100%);
+  --lw-panel-bg-dark:#1a6b82;
+  --lw-panel-radius:16px; --lw-panel-radius-sm:12px;
+  --lw-panel-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.18);
+  --lw-surface-subhead:rgba(0,0,0,.28);
+  --lw-surface-control:rgba(0,0,0,.22);
+  --lw-surface-row:rgba(0,0,0,.20); --lw-surface-row-hover:rgba(255,255,255,.20);
+  --lw-block:rgba(255,255,255,.09);
+  --lw-text-white:#fff; --lw-text-label:rgba(255,255,255,.8); --lw-text-muted:rgba(255,255,255,.6);
+  --lw-text-accent:#1C6282; --lw-accent:#1C6282; --lw-accent-mid:#7BC8E0;
+  --lw-border-faint:rgba(255,255,255,.12); --lw-border-mid:rgba(255,255,255,.25);
+  --lw-btn-radius:22px; --lw-btn-border:rgba(255,255,255,.30);
+  --lw-btn-text-shadow:0 1px 2px rgba(0,0,0,.45);
+  --lw-btn-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.38),inset 0 -1px 0 rgba(0,0,0,.18);
+  --lw-btn-primary:linear-gradient(180deg,#ffbb38 0%,#df7800 100%);
+  --lw-btn-secondary:linear-gradient(180deg,#5f9bbf 0%,#326187 100%);
+  --lw-close-bg:radial-gradient(circle at 40% 35%,#F55050 0%,#C82020 100%);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --font:'Nunito',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  /* type dots */
+  --t-action:#5dd0ff; --t-constraint:#ffbb38; --t-completion:#4ade80; --t-subtask:#7c8cff; --t-hint:#c084fc;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);color:var(--lw-text-white);
+  background:radial-gradient(1200px 700px at 50% -10%,#2b8fab 0%,#0c3a49 55%,#07222b 100%);min-height:100vh}
+a{color:inherit}
+
+/* header */
+header{display:flex;align-items:center;gap:16px;padding:16px 22px;flex-wrap:wrap}
+header .brand{display:flex;align-items:center;gap:12px}
+header .banner{height:52px;image-rendering:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+header h1{font-size:17px;font-weight:900;margin:0;letter-spacing:.3px;text-shadow:0 2px 4px rgba(0,0,0,.4)}
+header .sub{font:12px var(--mono);color:rgba(255,255,255,.7)}
+#engineStatus{margin-left:auto;font:12px var(--mono);font-weight:800;padding:6px 14px;border-radius:22px;
+  border:1px solid var(--lw-btn-border);background:rgba(0,0,0,.22)}
+#engineStatus.ok{color:#c9ffe0;background:linear-gradient(180deg,#2f9d5f,#1c6b40)}
+#engineStatus.err{color:#ffd9d9;background:linear-gradient(180deg,#c94c4c,#8f2b2b)}
+
+.wrap{display:grid;grid-template-columns:340px 1fr 340px;gap:16px;padding:0 16px 24px;align-items:start}
+@media(max-width:1180px){.wrap{grid-template-columns:1fr}}
+
+/* LittleWorlds panel */
+.panel{background:var(--lw-panel-bg);border-radius:var(--lw-panel-radius);box-shadow:var(--lw-panel-shadow);
+  overflow:hidden;margin-bottom:16px;color:var(--lw-text-white)}
+.panel>h2{margin:0;background:var(--lw-surface-subhead);padding:11px 14px;font-size:13px;font-weight:900;
+  display:flex;align-items:center;gap:8px;letter-spacing:.3px}
+.panel>h2 .count{margin-left:auto;font:11px var(--mono);font-weight:800;color:var(--lw-text-muted)}
+.panel .body{padding:12px}
+
+/* labels + inputs (near-white lw style) */
+.label{font-size:11px;color:var(--lw-text-label);margin:12px 0 5px;font-weight:900;text-transform:uppercase;letter-spacing:.4px}
+.label:first-child{margin-top:0}
+.opt{text-transform:none;color:var(--lw-text-muted);font-weight:700}
+input,textarea{width:100%;background:rgba(255,255,255,.92);border:none;border-radius:10px;color:var(--lw-text-accent);
+  padding:9px 11px;font-family:inherit;font-size:13px;font-weight:700}
+textarea{font-family:var(--mono);font-size:12px;line-height:1.5;resize:vertical;font-weight:600}
+input::placeholder{color:rgba(28,98,130,.45)}
+input:focus,textarea:focus{outline:none;background:#fff}
+
+/* buttons */
+.btn{font-family:inherit;font-size:13px;font-weight:900;padding:9px 18px;border-radius:var(--lw-btn-radius);
+  border:1px solid var(--lw-btn-border);cursor:pointer;color:#fff;text-shadow:var(--lw-btn-text-shadow);
+  background:rgba(255,255,255,.15);transition:.12s}
+.btn:hover{background:rgba(255,255,255,.26)}
+.btn.primary{background:var(--lw-btn-primary);box-shadow:var(--lw-btn-shadow)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.secondary{background:var(--lw-btn-secondary);box-shadow:var(--lw-btn-shadow)}
+.btn.sm{padding:6px 12px;font-size:12px;font-weight:800}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+
+/* white-alpha card block */
+.block{background:var(--lw-block);border:1px solid var(--lw-border-faint);border-radius:var(--lw-panel-radius-sm);
+  padding:9px 11px;margin-bottom:8px;display:flex;gap:10px;align-items:center;cursor:pointer;transition:.12s}
+.block:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.4)}
+.block .ic{width:38px;height:38px;flex-shrink:0;border-radius:9px;background:var(--lw-surface-control);
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.block .ic img{width:100%;height:100%;object-fit:contain}
+.block .tx{min-width:0;flex:1}
+.block .ref{font:12px var(--mono);font-weight:800;display:flex;align-items:center;gap:6px}
+.block .ref .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.block .meta{font-size:11px;color:var(--lw-text-muted);font-weight:700;margin-top:2px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.t-action{background:var(--t-action)}.t-constraint{background:var(--t-constraint)}
+.t-completion{background:var(--t-completion)}.t-subtask{background:var(--t-subtask)}.t-hint{background:var(--t-hint)}
+
+/* preset & item chips grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.tile{background:var(--lw-block);border:1px solid var(--lw-border-faint);border-radius:12px;padding:8px 6px;
+  text-align:center;cursor:pointer;transition:.12s}
+.tile:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5);transform:translateY(-1px)}
+.tile .ph{width:100%;height:48px;display:flex;align-items:center;justify-content:center;
+  background:var(--lw-surface-control);border-radius:8px;overflow:hidden;margin-bottom:5px}
+.tile .ph img{max-width:100%;max-height:100%;object-fit:contain}
+.tile .nm{font-size:10.5px;font-weight:800;line-height:1.15;color:var(--lw-text-white)}
+
+/* mission item bench cards */
+.bench{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}
+
+/* chips (amber) */
+.chip{display:inline-flex;align-items:center;gap:7px;background:rgba(255,187,56,.22);border:1.5px solid #ffbb38;
+  border-radius:999px;padding:4px 10px 4px 5px;font-size:12px;font-weight:800;margin:3px 4px 3px 0}
+.chip b{color:#ffe0a6}.chip .x{cursor:pointer;color:#ffbb38}
+.avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;color:#042f3e;background:var(--lw-accent-mid);border:2px solid rgba(255,255,255,.6);flex-shrink:0}
+
+/* mission cards */
+.mission{background:var(--lw-block);border:1px solid var(--lw-border-faint);border-radius:12px;padding:11px;margin-bottom:9px}
+.mission .top{display:flex;align-items:center;gap:10px}
+.mission .thumb{width:40px;height:40px;border-radius:9px;background:var(--lw-surface-control);overflow:hidden;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mission .thumb img{width:100%;height:100%;object-fit:contain}
+.mission .id{font-weight:900;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status{font:11px var(--mono);font-weight:800;padding:3px 10px;border-radius:999px;flex-shrink:0}
+.status.active{background:rgba(255,255,255,.16);color:#eaffff}
+.status.done{background:linear-gradient(180deg,#2f9d5f,#1c6b40);color:#c9ffe0}
+.steps{margin-top:8px;font-size:12px;color:rgba(255,255,255,.92);font-weight:700}
+.steps div{display:flex;align-items:center;gap:7px;padding:2px 0}
+.progress{height:8px;background:rgba(0,0,0,.28);border-radius:6px;margin-top:9px;overflow:hidden}
+.progress>i{display:block;height:100%;background:linear-gradient(90deg,#ffbb38,#df7800);width:0;transition:width .25s}
+.pgtext{font:11px var(--mono);font-weight:800;color:var(--lw-text-label);margin-top:4px}
+
+/* gallery */
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));gap:7px}
+.gal .g{aspect-ratio:1;background:var(--lw-surface-control);border-radius:9px;overflow:hidden;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;border:1px solid var(--lw-border-faint);transition:.12s;padding:4px}
+.gal .g:hover{border-color:rgba(255,255,255,.6);transform:scale(1.05)}
+.gal .g img{max-width:100%;max-height:100%;object-fit:contain}
+.galcat{font-size:10.5px;font-weight:900;color:var(--lw-text-label);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px}
+.galcat:first-child{margin-top:0}
+
+/* log */
+#log{font:11.5px var(--mono);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;
+  padding:4px 2px;font-weight:600}
+#log .l{padding:2px 6px;border-radius:6px;margin-bottom:2px}
+#log .fire{background:rgba(93,208,255,.14);color:#bfeeff}
+#log .done{background:rgba(74,222,128,.16);color:#c9ffd8}
+#log .prog{background:rgba(255,187,56,.16);color:#ffe0a6}
+#log .err{background:rgba(248,113,113,.2);color:#ffd0d0}
+#log .info{color:var(--lw-text-muted)}
+
+/* close btn */
+.close{width:24px;height:24px;border-radius:50%;border:1.5px solid rgba(255,255,255,.9);background:var(--lw-close-bg);
+  color:#fff;font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+.err-box{color:#ffd0d0;font:12px var(--mono);margin-top:8px;white-space:pre-wrap;font-weight:700}
+.hint{font-size:11px;color:var(--lw-text-muted);margin-top:6px;font-weight:700}
+.kv{font:12px var(--mono);color:var(--lw-text-muted);font-weight:700}
+code{font-family:var(--mono);background:rgba(0,0,0,.25);padding:1px 6px;border-radius:5px;font-weight:700}
+
+/* lightbox */
+#lightbox{position:fixed;inset:0;background:var(--lw-overlay-bg);display:none;align-items:center;justify-content:center;
+  z-index:5000;padding:24px;backdrop-filter:blur(3px)}
+#lightbox.show{display:flex}
+#lightbox .card{background:var(--lw-panel-bg);border-radius:16px;box-shadow:var(--lw-panel-shadow);padding:14px;max-width:min(90vw,720px)}
+#lightbox img{max-width:100%;max-height:70vh;display:block;border-radius:8px;background:rgba(0,0,0,.25)}
+#lightbox .cap{font:12px var(--mono);color:var(--lw-text-white);margin-top:8px;font-weight:700;word-break:break-all}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.3);border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img class="banner" id="titleBanner" alt="Missions" />
+    <div>
+      <h1>🗺️ Mission Engine Sandbox</h1>
+      <div class="sub">drives the real <code>src/renderer/engine/missions</code> · LittleWorlds theme</div>
+    </div>
+  </div>
+  <span id="engineStatus">loading engine…</span>
+</header>
+
+<div class="wrap">
+  <!-- LEFT -->
+  <div>
+    <div class="panel">
+      <h2>🧩 Mission Blocks <span class="count" id="blockCount"></span></h2>
+      <div class="body">
+        <div class="hint" style="margin:0 0 8px">Click a block to insert it into the composer.</div>
+        <div id="blockList"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>🌍 World Context</h2>
+      <div class="body">
+        <div class="block" style="cursor:default">
+          <div class="ic"><img id="spaceThumb" alt=""></div>
+          <div class="tx"><div class="ref"><span class="txt">current space</span></div>
+            <div class="meta" id="spaceMeta">—</div></div>
+        </div>
+        <div class="label">Space name</div><input id="ctxSpaceName" value="Hall" />
+        <div class="row" style="margin-top:8px">
+          <div><div class="label">Space id</div><input id="ctxSpaceId" value="hall-1" /></div>
+          <div><div class="label">Local avatar id</div><input id="ctxAvatarId" value="av-local" /></div>
+        </div>
+        <button class="btn secondary sm" style="width:100%;margin-top:10px" onclick="rebuildContext()">↻ Rebuild context</button>
+        <div class="label">Mission keys held <span class="opt">chain-scoped store</span></div>
+        <div id="keyList"><span class="kv">none</span></div>
+        <div class="row" style="margin-top:7px">
+          <input id="keyName" placeholder="key e.g. door-open" />
+          <button class="btn sm" style="flex:0 0 auto" onclick="addKey()">🔑 grant</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MIDDLE -->
+  <div>
+    <div class="panel">
+      <h2>① Compose &amp; add a mission</h2>
+      <div class="body">
+        <div class="label">Presets</div>
+        <div class="grid" id="presetGrid"></div>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:0 0 40%"><div class="label">Mission id</div><input id="missionId" value="demo-1" /></div>
+          <div><div class="label">Illustration</div>
+            <div id="missionArtRow" class="row" style="gap:5px"></div>
+          </div>
+        </div>
+        <div class="label">Composition — LW JSON <span class="opt">{ blocks:[ {type,ref,params} ] }</span></div>
+        <textarea id="composition" rows="8"></textarea>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn primary" onclick="addMission()">▶ Parse &amp; add mission</button>
+          <button class="btn sm" onclick="toXml()">LW-JSON → MM-XML</button>
+          <button class="btn sm" onclick="fromXml()">MM-XML → LW-JSON</button>
+        </div>
+        <div id="composeErr" class="err-box"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>② Fire triggers</h2>
+      <div class="body">
+        <div class="label">Actor</div>
+        <div id="actorRow"></div>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn" onclick="fireEnter()">🚪 Enter space</button>
+          <button class="btn" onclick="fireTime()">⏱️ Time elapsed</button>
+          <button class="btn" onclick="fireComplete()">✅ Complete mission</button>
+        </div>
+
+        <div class="label">Task-update item bench <span class="opt">click an item → SWUpdateMission to “<span id="benchTarget">demo-1</span>”</span></div>
+        <div class="bench" id="itemBench"></div>
+
+        <div class="label">Use a consumable on target <span class="opt">→ SWAvatarUseConsumable</span></div>
+        <div class="grid" id="consumableGrid"></div>
+
+        <div class="label">Advanced — raw <code>bus.emit(name, rawEvent)</code></div>
+        <div class="row">
+          <input id="rawName" value="SWAvatarEnterSpace" style="flex:0 0 200px" />
+          <input id="rawEvent" value='{"avatar":{"id":"av-local","fullName":"Player One","isLocal":true,"isUser":true}}' />
+        </div>
+        <button class="btn sm" style="margin-top:7px" onclick="fireRaw()">↯ emit raw event</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>🎯 Active missions <span class="count" id="missionCount"></span></h2>
+      <div class="body" id="missionList"><span class="kv">No missions added yet.</span></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="panel">
+      <h2>🖼️ Mission asset gallery <span class="count" id="galCount"></span></h2>
+      <div class="body"><div id="gallery"></div></div>
+    </div>
+    <div class="panel">
+      <h2>📜 Live log <button class="btn sm" style="margin-left:auto" onclick="clearLog()">clear</button></h2>
+      <div class="body" style="padding:8px"><div id="log"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox" onclick="this.classList.remove('show')">
+  <div class="card"><img id="lbImg" alt=""><div class="cap" id="lbCap"></div></div>
+</div>
+
+<script type="module">
+import {
+  BlockRegistry, CompositionParser, MissionRunner, registerCoreBlocks,
+  MissionKeyStore, MissionActionsUser, TriggerBus, MockTriggerContext,
+  IntermediateMissionResult,
+} from './src/renderer/engine/missions/index.js'
+
+const $ = (id)=>document.getElementById(id)
+const A = '/Assets'  // served asset root
+const enc = (p)=>p.split('/').map(encodeURIComponent).join('/')
+
+/* ── curated mission imagery (real files under /Assets) ── */
+const IMG = {
+  titleBanner: enc('/SmallWorldsX_deblobbed copy/PNG/content.smallworlds.app_content-v5152_assets_items_base_hub_hub_sign_01_title_missions.png'),
+  pirate:  `${A}/images/space_icon_mission_pirate.png`,
+  island:  `${A}/Spaces/Models/mission_island.png`,
+  jetski:  `${A}/_uncategorised/content.smallworlds.app_content-v5152_assets_spaces_models_mission_jetski_01.png`,
+  toolbar: `${A}/icons/toolbar_missions.png`,
+  play:    `${A}/Items/base/shared/icon_s_missionplay.png`,
+  hairdryer:`${A}/Items/base/modern/icon_m_fashionmission_hair_dryer.png`,
+  shelves: `${A}/Items/base/modern/icon_m_fashionmission_shelves_boxed.png`,
+  missionsHero:`${A}/Client_UI/missions.png`,
+}
+const BLOCK_ICON = {
+  'action/movement/enter_space':   IMG.pirate,
+  'constraint/location/specific':  IMG.island,
+  'action/consumable/use_on_target':IMG.hairdryer,
+  'action/item/mission_update':    IMG.shelves,
+  'constraint/state/missionkeys':  IMG.play,
+  'completion/missionkey/give':    IMG.toolbar,
+}
+// clickable mission-item bench (fires SWUpdateMission)
+const BENCH = [
+  ['surf-wave','Surf Wave',`${A}/Items/base/outdoor/icon_o_surfmission_wave.png`],
+  ['jetski-checkpoint','Checkpoint',`${A}/Items/base/outdoor/icon_o_jetskimission_checkpoint.png`],
+  ['jetski-speedboost','Speed Boost',`${A}/Items/base/outdoor/icon_o_jetskimission_speedboost.png`],
+  ['jetski-rock','Rock',`${A}/Items/base/outdoor/icon_o_jetskimission_rock.png`],
+  ['snow-banner','Start Banner',`${A}/Items/base/outdoor/icon_o_snowmission_startbanner.png`],
+  ['snow-rope','Rope Barrier',`${A}/Items/base/outdoor/icon_o_snowmission_ropebarrier.png`],
+  ['fashion-tray','Tray',`${A}/Items/base/modern/icon_m_fashionmission_tray.png`],
+  ['fashion-trolley','Trolley',`${A}/Items/base/modern/icon_m_fashionmission_trolley.png`],
+]
+const CONSUMABLES = [
+  ['hairdryer','Hair Dryer',`${A}/Items/base/modern/icon_m_fashionmission_hair_dryer.png`],
+  ['perm','Perm Stand',`${A}/Items/base/modern/icon_m_fashionmission_hair_perm_stand_a.png`],
+  ['wings','Mission Wings',`${A}/Items/base/consumables/back/con_bak_271_missionwings_icon.png`],
+  ['missionplay','Mission Play',`${A}/Items/base/shared/icon_s_missionplay.png`],
+]
+const MISSION_ART = [IMG.pirate, IMG.island, IMG.jetski, IMG.toolbar, IMG.play, IMG.shelves]
+// gallery groups
+const GALLERY = {
+  'Icons':[
+    `${A}/icons/toolbar_missions.png`,`${A}/catalog/icons/icon_mission2.png`,
+    `${A}/Items/base/shared/icon_s_missionplay.png`,`${A}/Items/base/sounds/icon_s_mission.png`,
+    `${A}/Items/base/consumables/back/con_bak_271_missionwings_icon.png`,
+    `${A}/Items/base/modern/icon_m_fashionmission_hair_dryer.png`,`${A}/Items/base/modern/icon_m_fashionmission_hair_perm_stand_a.png`,
+    `${A}/Items/base/modern/icon_m_fashionmission_shelves_boxed.png`,`${A}/Items/base/modern/icon_m_fashionmission_tray.png`,
+    `${A}/Items/base/modern/icon_m_fashionmission_trolley.png`,
+    `${A}/Items/base/outdoor/icon_o_jetskimission_checkpoint.png`,`${A}/Items/base/outdoor/icon_o_jetskimission_speedboost.png`,
+    `${A}/Items/base/outdoor/icon_o_jetskimission_rock.png`,`${A}/Items/base/outdoor/icon_o_jetskimission_ripples.png`,
+    `${A}/Items/base/outdoor/icon_o_surfmission_wave.png`,`${A}/Items/base/outdoor/icon_o_snowmission_startbanner.png`,
+    `${A}/Items/base/outdoor/icon_o_snowmission_startlights.png`,`${A}/Items/base/outdoor/icon_o_snowmission_startline.png`,
+    `${A}/Items/base/outdoor/icon_o_snowmission_ropebarrier.png`,
+  ],
+  'Items':[
+    `${A}/Items/base/modern/m_fashionmission_item_base.png`,`${A}/Items/base/modern/m_fashionmission_item_dryer.png`,
+    `${A}/Items/base/modern/m_fashionmission_hand_dryer.png`,`${A}/Items/base/modern/m_fashionmission_hand_effect.png`,
+    `${A}/Items/base/modern/m_fashionmission_shelves_boxed.png`,`${A}/Items/base/modern/m_fashionmission_tray.png`,
+    `${A}/Items/base/modern/m_fashionmission_trolley.png`,`${A}/Items/base/modern/m_fashionmission_hair_shampoo_01.png`,
+    `${A}/Items/base/outdoor/o_surfmission_wave.png`,`${A}/Items/base/outdoor/o_jetskimission_rock.png`,
+    `${A}/Items/base/outdoor/o_jetskimission_ripples.png`,
+  ],
+  'Spaces & UI':[
+    `${A}/Client_UI/missions.png`,`${A}/Spaces/Models/mission_island.png`,
+    `${A}/_uncategorised/content.smallworlds.app_content-v5152_assets_spaces_models_mission_jetski_01.png`,
+    `${A}/images/space_icon_mission_pirate.png`,`${A}/Items/base/hub/hub_kiosk_medium_ppl_missions.png`,
+    `${A}/_uncategorised/content.smallworlds.app_content-v5152_assets_items_base_hub_hub_kiosk_medium_mission_bg.png`,
+    enc('/SmallWorldsX_deblobbed copy/PNG/content.smallworlds.app_content-v5152_assets_items_base_hub_hub_sign_01_title_missions.png'),
+    enc('/Assets/images/interstitial/Bandit Village Mission Interstitial.png'),
+    `${A}/Items/base/shared/s_findjobs_mission.png`,
+  ],
+}
+
+const state = { registry:null,parser:null,runner:null,keyStore:null,ctx:null,bus:null,
+  missions:new Map(), updCounter:0, missionArt:IMG.pirate }
+
+function log(msg,cls='info'){const el=document.createElement('div');el.className='l '+cls;
+  el.textContent=`${new Date().toLocaleTimeString('en-US',{hour12:false})}  ${msg}`;$('log').prepend(el)}
+window.clearLog=()=>{$('log').innerHTML='';log('log cleared')}
+window.lightbox=(src,cap)=>{$('lbImg').src=src;$('lbCap').textContent=decodeURIComponent(cap);$('lightbox').classList.add('show')}
+
+function boot(){
+  const registry=new BlockRegistry(), parser=new CompositionParser(registry), runner=new MissionRunner()
+  const keyStore=new MissionKeyStore(), actionsUser=new MissionActionsUser(keyStore)
+  registerCoreBlocks(registry, actionsUser)
+  runner.onComplete((id)=>{const m=state.missions.get(id);if(m)m.completed=true;
+    log(`🏁 MISSION COMPLETE → "${id}"`,'done');renderMissions()})
+  Object.assign(state,{registry,parser,runner,keyStore})
+  $('titleBanner').src=IMG.titleBanner
+  rebuildContext(); renderBlocks(); renderPresets(); renderBench(); renderConsumables(); renderArtPicker()
+  renderActor(); renderKeys(); renderGallery()
+  $('engineStatus').textContent=`engine ready · ${registry.size} blocks`; $('engineStatus').className='ok'
+  $('blockCount').textContent=`${registry.size} registered`
+  log(`engine booted — ${registry.size} core blocks registered`,'done')
+  loadPreset('enter')
+}
+
+window.rebuildContext=()=>{
+  const space={spaceId:$('ctxSpaceId').value.trim(),ownerId:'owner-1',modelId:'model-1',name:$('ctxSpaceName').value.trim()}
+  state.ctx=new MockTriggerContext({keyStore:state.keyStore,localAvatarId:$('ctxAvatarId').value.trim(),space})
+  state.bus=new TriggerBus(state.runner,state.ctx)
+  $('spaceThumb').src=IMG.island; $('spaceMeta').textContent=`${space.name} · id ${space.spaceId}`
+  log(`context rebuilt — space "${space.name}" (${space.spaceId}), avatar ${state.ctx.getLocalAvatarId()}`)
+}
+
+function renderBlocks(){
+  const w=$('blockList');w.innerHTML=''
+  for(const [ref,def] of state.registry.list()){
+    const params=(def.paramSchema||[]).map(p=>p.type==='hidden'?'⟨'+(p.sentinel||'hidden')+'⟩':(p.label||p.type)).join(', ')
+    const ic=BLOCK_ICON[ref]
+    const d=document.createElement('div');d.className='block'
+    d.innerHTML=`<div class="ic">${ic?`<img src="${ic}" alt="">`:'🧩'}</div>
+      <div class="tx"><div class="ref"><span class="dot t-${def.type}"></span><span class="txt">${ref}</span></div>
+      <div class="meta">${def.name} · params: ${params||'none'}</div></div>`
+    d.onclick=()=>insertBlock(ref,def);w.appendChild(d)
+  }
+}
+function defaultParams(def){return (def.paramSchema||[]).map(p=>p.type==='hidden'?(p.sentinel||''):(p.default??''))}
+window.insertBlock=null
+function insertBlock(ref,def){
+  let json;try{json=JSON.parse($('composition').value)}catch{json={blocks:[]}}
+  if(!Array.isArray(json.blocks))json.blocks=[]
+  json.blocks.push({type:def.type,ref,params:defaultParams(def)})
+  $('composition').value=JSON.stringify(json,null,2);log(`+ inserted block ${ref}`)
+}
+
+const PRESETS={
+  enter:{label:'Enter “Hall”',icon:IMG.pirate,id:'demo-1',art:IMG.pirate,
+    json:{blocks:[{type:'action',ref:'action/movement/enter_space',params:['Hall']}]}},
+  collect:{label:'Collect 3 items',icon:IMG.shelves,id:'collect-1',art:IMG.shelves,
+    json:{blocks:[{type:'action',ref:'action/item/mission_update',params:['__lw_mission_id__','3','__lw_subtask_id__']}]}},
+  gate:{label:'Enter + give key',icon:IMG.toolbar,id:'giver-1',art:IMG.toolbar,
+    json:{blocks:[{type:'action',ref:'action/movement/enter_space',params:['Hall']},
+      {type:'completion',ref:'completion/missionkey/give',params:['door-open','chain-1']}]}},
+  keylock:{label:'Enter (needs key)',icon:IMG.play,id:'locked-1',art:IMG.play,
+    json:{blocks:[{type:'action',ref:'action/movement/enter_space',params:['Hall']},
+      {type:'constraint',ref:'constraint/state/missionkeys',params:['door-open','']}]}},
+  surf:{label:'Ride 5 waves',icon:`${A}/Items/base/outdoor/icon_o_surfmission_wave.png`,id:'surf-1',art:IMG.island,
+    json:{blocks:[{type:'action',ref:'action/item/mission_update',params:['__lw_mission_id__','5','__lw_subtask_id__']}]}},
+}
+function renderPresets(){
+  const g=$('presetGrid');g.innerHTML=''
+  for(const k in PRESETS){const p=PRESETS[k];const t=document.createElement('div');t.className='tile'
+    t.innerHTML=`<div class="ph"><img src="${p.icon}" alt=""></div><div class="nm">${p.label}</div>`
+    t.onclick=()=>loadPreset(k);g.appendChild(t)}
+}
+window.loadPreset=(k)=>{const p=PRESETS[k];$('missionId').value=p.id
+  $('composition').value=JSON.stringify(p.json,null,2);state.missionArt=p.art;renderArtPicker()
+  $('benchTarget').textContent=p.id;$('composeErr').textContent=''}
+
+function renderArtPicker(){
+  const r=$('missionArtRow');r.innerHTML=''
+  MISSION_ART.forEach(src=>{const b=document.createElement('div')
+    b.style.cssText='width:30px;height:30px;border-radius:7px;overflow:hidden;cursor:pointer;flex:0 0 auto;'+
+      'background:var(--lw-surface-control);display:flex;align-items:center;justify-content:center;'+
+      (state.missionArt===src?'outline:2px solid #ffbb38':'outline:1px solid rgba(255,255,255,.2)')
+    b.innerHTML=`<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain">`
+    b.onclick=()=>{state.missionArt=src;renderArtPicker()};r.appendChild(b)})
+}
+
+function renderBench(){
+  const g=$('itemBench');g.innerHTML=''
+  BENCH.forEach(([id,nm,icon])=>{const t=document.createElement('div');t.className='tile'
+    t.innerHTML=`<div class="ph"><img src="${icon}" alt=""></div><div class="nm">${nm}</div>`
+    t.onclick=()=>{state.updCounter++;emit('SWUpdateMission',{missionId:$('benchTarget').textContent,item:{uid:id+'-'+state.updCounter},value:1})}
+    g.appendChild(t)})
+}
+function renderConsumables(){
+  const g=$('consumableGrid');g.innerHTML=''
+  CONSUMABLES.forEach(([id,nm,icon])=>{const t=document.createElement('div');t.className='tile'
+    t.innerHTML=`<div class="ph"><img src="${icon}" alt=""></div><div class="nm">${nm}</div>`
+    t.onclick=()=>emit('SWAvatarUseConsumable',{avatar:{id:$('ctxAvatarId').value.trim(),isLocal:true,isUser:true},
+      modelName:id,modelId:'m-'+id,targetAvatar:{id:'av-target',fullName:'Buddy'}})
+    g.appendChild(t)})
+}
+function renderActor(){
+  const id=$('ctxAvatarId').value.trim()
+  $('actorRow').innerHTML=`<span class="chip"><span class="avatar">P1</span>Acting as <b>Player One</b> · ${id}</span>
+    <span class="chip"><span class="avatar" style="background:#ffbb38">B</span>Target <b>Buddy</b></span>`
+}
+function renderKeys(){const ids=state.keyStore.ids()
+  $('keyList').innerHTML=ids.length?ids.map(k=>`<span class="chip">🔑 ${k}<span class="x">✕</span></span>`).join(''):'<span class="kv">none</span>'
+  ;[...$('keyList').querySelectorAll('.chip')].forEach((c,i)=>c.querySelector('.x')?.addEventListener('click',()=>{
+    state.keyStore.remove(ids[i],'chain-1');renderKeys();log(`removed key "${ids[i]}"`)}))}
+window.addKey=()=>{const k=$('keyName').value.trim();if(!k)return
+  state.keyStore.add(k,'chain-1',true);renderKeys();log(`granted key "${k}" (chain-1)`);$('keyName').value=''}
+
+window.addMission=()=>{$('composeErr').textContent=''
+  const id=$('missionId').value.trim();let json
+  try{json=JSON.parse($('composition').value)}catch(e){$('composeErr').textContent='JSON parse error: '+e.message;return}
+  try{const scripts=state.parser.parseLwJson(json);state.runner.removeMission(id)
+    state.runner.addMission({id,scripts})
+    state.missions.set(id,{id,json,completed:false,art:state.missionArt})
+    $('benchTarget').textContent=id
+    log(`＋ added mission "${id}" (${json.blocks.length} block${json.blocks.length!==1?'s':''})`,'done');renderMissions()
+  }catch(e){$('composeErr').textContent='engine error: '+e.message;log('add failed: '+e.message,'err')}}
+
+window.toXml=()=>{try{$('composition').value=state.parser.lwJsonToMmXml(JSON.parse($('composition').value));log('LW-JSON → MM-XML')}
+  catch(e){$('composeErr').textContent=e.message}}
+window.fromXml=()=>{try{$('composition').value=JSON.stringify(state.parser.mmXmlToLwJson($('composition').value),null,2);log('MM-XML → LW-JSON')}
+  catch(e){$('composeErr').textContent=e.message}}
+
+function emit(name,ev){try{state.bus.emit(name,ev);log(`↯ emit ${name}  ${JSON.stringify(ev)}`,'fire');refreshProgress()}
+  catch(e){log(`emit ${name} error: ${e.message}`,'err')}}
+window.fireEnter=()=>emit('SWAvatarEnterSpace',{avatar:{id:$('ctxAvatarId').value.trim(),fullName:'Player One',isLocal:true,isUser:true}})
+window.fireComplete=()=>emit('SWCompleteMission',{missionId:$('benchTarget').textContent})
+window.fireTime=()=>emit('SWTimeElapsed',{startTime:0,duration:10})
+window.fireRaw=()=>{try{emit($('rawName').value.trim(),JSON.parse($('rawEvent').value))}catch(e){log('raw JSON error: '+e.message,'err')}}
+
+function refreshProgress(){for(const [id] of state.missions){const imr=state.runner.getIntermediateResult(id)
+  if(imr instanceof IntermediateMissionResult){const m=state.missions.get(id);m.stage=imr.intermediateStage;m.total=imr.stageTotal
+    log(`   ↳ "${id}" progress ${imr.intermediateStage}/${imr.stageTotal}`,'prog')}}renderMissions()}
+
+function renderMissions(){const w=$('missionList');$('missionCount').textContent=state.missions.size?`${state.missions.size}`:''
+  if(!state.missions.size){w.innerHTML='<span class="kv">No missions added yet.</span>';return}
+  w.innerHTML=''
+  for(const [id,m] of state.missions){const div=document.createElement('div');div.className='mission'
+    const pct=(m.total>0)?Math.round(100*(m.stage||0)/m.total):(m.completed?100:0)
+    const steps=m.json.blocks.map(b=>{const def=state.registry.resolve(b.ref)
+      const desc=def&&def.getDescription?def.getDescription(b.params):b.ref
+      return `<div><span class="dot t-${b.type}"></span>${desc}</div>`}).join('')
+    div.innerHTML=`<div class="top"><div class="thumb"><img src="${m.art||IMG.pirate}" alt=""></div>
+        <span class="id">${id}</span>
+        <span class="status ${m.completed?'done':'active'}">${m.completed?'COMPLETE':'active'}</span></div>
+      <div class="steps">${steps}</div>
+      ${(m.total>0||m.completed)?`<div class="progress"><i style="width:${pct}%"></i></div>
+        <div class="pgtext">${m.completed?'done':(m.stage||0)+' / '+m.total}</div>`:''}`
+    w.appendChild(div)}
+}
+
+function renderGallery(){const g=$('gallery');g.innerHTML='';let n=0
+  for(const cat in GALLERY){const h=document.createElement('div');h.className='galcat';h.textContent=cat;g.appendChild(h)
+    const grid=document.createElement('div');grid.className='gal'
+    GALLERY[cat].forEach(src=>{n++;const c=document.createElement('div');c.className='g'
+      c.innerHTML=`<img src="${src}" loading="lazy" alt="">`
+      c.onclick=()=>window.lightbox(src,src.split('/').pop());grid.appendChild(c)})
+    g.appendChild(grid)}
+  $('galCount').textContent=`${n} images`}
+
+;['ctxAvatarId'].forEach(idv=>$(idv).addEventListener('input',renderActor))
+try{boot()}catch(e){$('engineStatus').textContent='engine error';$('engineStatus').className='err'
+  log('BOOT FAILED: '+e.message,'err');console.error(e)}
+</script>
+</body>
+</html>
