@@ -38,7 +38,7 @@ use App\Models\Avatars;
 //Public Routes
 //Route::resource('products', ProductController::class);
 Route::post('/register', [RegisterController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login'])->middleware('auth.basic');
+Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/token', [AuthController::class, 'loginWithToken']);
 Route::post('/auth/invite', [AuthController::class, 'invite']);
 Route::post('/auth/justRegistered', [AuthController::class, 'justRegistered']);
