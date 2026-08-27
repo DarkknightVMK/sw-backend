@@ -13,6 +13,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\CatalogItemEntryController;
 use App\Http\Controllers\ItemsController;
 use App\Http\Controllers\UploadController;
+use App\Http\Controllers\PvpController;
 use App\Http\Controllers\root;
 use App\Http\Controllers\PetController;
 use App\Http\Controllers\InvitesController;
@@ -167,6 +168,13 @@ Route::group(['middleware' => ['swHeader']], function ()
     Route::post('/spaces/{id}/bans',             [SpaceSettingsController::class, 'addBan']);
     Route::delete('/spaces/{id}/bans/{banId}',   [SpaceSettingsController::class, 'removeBan']);
     Route::get('/spaces/{id}/avatar-search',     [SpaceSettingsController::class, 'avatarSearch']);
+
+    // Per-space PvP. Reading is available to every visitor; mutations are admin-gated in the controller.
+    Route::get('/pvp/config/{spaceId}',          [PvpController::class, 'getConfig']);
+    Route::post('/pvp/config/{spaceId}',         [PvpController::class, 'saveConfig']);
+    Route::put('/pvp/enabled/{spaceId}',         [PvpController::class, 'setEnabled']);
+    Route::get('/pvp/updates',                   [PvpController::class, 'updates']);
+    Route::post('/pvp/control/{spaceId}',        [PvpController::class, 'control']);
 
     Route::get('/items/generate/{id}/{model}', [ItemsController::class, 'createItemsbyModel']);
     Route::get('/items/make/all/{id}', [ItemsController::class, 'generateAll']);
